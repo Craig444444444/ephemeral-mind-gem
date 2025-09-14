@@ -8,6 +8,9 @@ A sophisticated multi-perspective AI system built on Google Gemini, designed for
 **Author:** Craig Huckerby
 **System Builder:** Google Gemini
 
+Please red AI literacy guide
+https://claude.ai/public/artifacts/60b9a6cb-a3a4-4dc6-852e-626b5ff64b92
+
 ## 📖 Overview
 
 This project documents the rigorous testing and analysis of "The Ephemeral Mind Gem," an AI architecture that employs a multi-persona cognitive framework (Skeptic, Futurist, Ethicist, Scientist, Nihilist, Historian) followed by synthesis to tackle complex problems.
