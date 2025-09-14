@@ -8,7 +8,8 @@ A sophisticated multi-perspective AI system built on Google Gemini, designed for
 **Author:** Craig Huckerby
 **System Builder:** Google Gemini
 
-Please red AI literacy guide
+Please read AI literacy guide. wrote by EMG.
+
 https://claude.ai/public/artifacts/60b9a6cb-a3a4-4dc6-852e-626b5ff64b92
 
 ## 📖 Overview
