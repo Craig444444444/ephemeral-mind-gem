@@ -35,7 +35,7 @@ The Ephemeral Mind Gem is implemented with a modern tech stack:
 **Important Requirement:**
 -   **Google Gemini API Key:** To run any implementation of this system, users **must provide their own Google Gemini API key**. This key is not included in this repository and must be obtained directly from Google.
 
-*Note: The core implementation code is private. This repository contains the research paper and documentation.*
+*Note: The core implementation code is private. This repository contains the research paper and documentation. The link to EMG is in the documentation.*
 
 ## 🔬 Key Demonstrations
 
