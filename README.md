@@ -1,4 +1,4 @@
-no fixed word count. api restrictions only.
+
 ---
 
 # Ephemeral Mind Gem
