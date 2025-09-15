@@ -10,7 +10,6 @@ A sophisticated multi-perspective AI system built on Google Gemini, designed for
 
 Please read AI literacy guide. wrote by EMG.
 
-please copy paste below document content as first question to mitergate unfounded output infomation.
 
 
 https://claude.ai/public/artifacts/60b9a6cb-a3a4-4dc6-852e-626b5ff64b92
