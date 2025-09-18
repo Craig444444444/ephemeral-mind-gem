@@ -1,4 +1,8 @@
-happy to help with other projects debugging.  Holla
+I am purely creating case study's for my own independent research and improvement in AI cognative architecture.
+
+Feel free to distribute test disprove . 
+
+would love feed back if you find it useful.
 ---
 
 # Ephemeral Mind Gem
