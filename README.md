@@ -1,6 +1,6 @@
 I am purely creating case study's for my own independent research and improvement in AI cognative architecture.
 
-Feel free to distribute test disprove . 
+Feel free to distribute test disprove and cite  
 
 would love feed back if you find it useful.
 ---
