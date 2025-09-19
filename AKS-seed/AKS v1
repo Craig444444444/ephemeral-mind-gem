@@ -1,0 +1,2540 @@
+```python
+# =========================================================
+# 🚀 Autonomous Knowledge System - Autonomous System Framework (Integrated & Enhanced)
+# This file consolidates all enhanced components and incorporates
+# further structural and functional improvements discussed.
+# Copy-Paste in Google Colab and Run Once.
+# =========================================================
+
+# --- 0. Initial Setup & Dependencies ---
+# Combined and deduplicated pip install commands
+# Using verbose install for clarity in case of errors
+!pip install --upgrade -q google-generativeai gitpython requests pygithub html2text markdownify duckduckgo-search pyfiglet transformers torch python-dateutil beautifulsoup4 tqdm langchain openai sentence-transformers fake-useragent PyPDF2 python-docx autopep8
+!sudo apt-get update && sudo apt-get install -y git-lfs
+
+import os
+import re
+import json
+import time
+import random
+import zipfile
+import shutil
+import threading
+import subprocess
+import logging
+import sys
+import hashlib
+import ast
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Tuple, Callable
+from getpass import getpass
+from logging.handlers import RotatingFileHandler
+from collections import Counter, deque
+import importlib.util
+from urllib.parse import urlencode, urlparse, parse_qs
+import hmac
+from io import StringIO # For Gradio log capture
+
+# --- Constants ---
+MAX_LOG_SIZE = 10 * 1024 * 1024 # 10MB
+MAX_LOG_BACKUPS = 5
+DEFAULT_CYCLE_INTERVAL = 15 * 60 # 15 minutes in seconds
+MAX_API_RETRIES = 5
+MIN_DISK_SPACE = 1 * 1024 * 1024 * 1024 # 1GB
+
+# Package import name mapping for installation checks
+PACKAGE_MAPPING = {
+"pyfiglet": "pyfiglet",
+"google-generativeai": "google.generativeai",
+"transformers": "transformers",
+"torch": "torch",
+"python-dateutil": "dateutil",
+"requests": "requests",
+"beautifulsoup4": "bs4",
+"tqdm": "tqdm",
+"gitpython": "git",
+"gradio": "gradio",
+"pygithub": "github",
+"html2text": "html2text",
+"markdownify": "markdownify",
+"duckduckgo-search": "duckduckgo_search",
+"langchain": "langchain",
+"openai": "openai",
+"sentence-transformers": "sentence_transformers",
+"fake-useragent": "fake_useragent",
+"PyPDF2": "PyPDF2",
+"python-docx": "docx",
+"autopep8": "autopep8",
+"xmltodict": "xmltodict",
+}
+
+# --- Install required packages ---
+def install_required_packages():
+""" Checks for and installs all required Python packages and git-lfs. Ensures a clean and robust environment for the AKS. """
+required_packages = {
+"pyfiglet": ">=0.8.post1",
+"google-generativeai": ">=0.5.4",
+"transformers": ">=4.40.0",
+"torch": ">=2.2.0",
+"python-dateutil": ">=2.8.2",
+"requests": ">=2.31.0",
+"beautifulsoup4": ">=4.12.0",
+"tqdm": ">=4.66.0",
+"gitpython": ">=3.1.43",
+"gradio": ">=4.0.0",
+"pygithub": ">=2.2.0",
+"html2text": ">=2020.1.16",
+"markdownify": ">=0.11.6",
+"duckduckgo-search": ">=5.1.0",
+"langchain": ">=0.1.0",
+"openai": ">=1.0.0",
+"sentence-transformers": ">=2.7.0",
+"fake-useragent": ">=1.5.1",
+"PyPDF2": ">=3.0.0",
+"python-docx": ">=1.1.0",
+"autopep8": ">=2.0.4",
+"xmltodict": ">=0.13.0",
+}
+
+print("Checking and installing required Python packages...")
+packages_to_install = []
+for package, version in required_packages.items():
+try:
+import_name = PACKAGE_MAPPING.get(package, package.split("==")[0].replace("-", "_"))
+importlib.import_module(import_name)
+print(f"DEBUG: Package '{package}' already installed.")
+except ImportError:
+packages_to_install.append(f"{package}{version}")
+except Exception as e:
+print(f"ERROR: Unexpected error during import check for '{package}': {e}", file=sys.stderr)
+
+if packages_to_install:
+print(f"INFO: Installing {len(packages_to_install)} missing packages...")
+try:
+subprocess.run(
+[sys.executable, "-m", "pip", "install", *packages_to_install],
+check=True,
+capture_output=True,
+text=True
+)
+print(f"INFO: Successfully installed missing packages.")
+except subprocess.CalledProcessError as e:
+print(f"ERROR: Failed to install packages: {e.stderr.strip()}", file=sys.stderr)
+except Exception as e:
+print(f"ERROR: Unexpected error during bulk installation: {e}", file=sys.stderr)
+else:
+print("INFO: All required Python packages are already installed.")
+
+print("Checking and installing git-lfs...")
+try:
+subprocess.run(["git", "lfs"], check=True, capture_output=True, text=True)
+print("DEBUG: git-lfs is already installed.")
+except (subprocess.CalledProcessError, FileNotFoundError):
+print("INFO: git-lfs not found. Attempting to install...")
+try:
+subprocess.run(["sudo", "apt-get", "update"], check=True, capture_output=True, text=True)
+subprocess.run(["sudo", "apt-get", "install", "-y", "git-lfs"], check=True, capture_output=True, text=True)
+subprocess.run(["git", "lfs", "install"], check=True, capture_output=True, text=True)
+print("INFO: Successfully installed git-lfs.")
+except subprocess.CalledProcessError as e:
+print(f"ERROR: Failed to install git-lfs: {e.stderr.strip()}", file=sys.stderr)
+except Exception as e:
+print(f"ERROR: Unexpected error during git-lfs installation: {e}", file=sys.stderr)
+
+install_required_packages()
+
+# --- Conditional Imports (after installation attempt) ---
+try:
+import pyfiglet
+except ImportError:
+pyfiglet = None
+print("WARNING: pyfiglet not available. ASCII art banners will be disabled.")
+
+try:
+import google.generativeai as genai
+except ImportError:
+genai = None
+print("WARNING: Google Generative AI not available. Gemini provider will be disabled.")
+
+try:
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+import torch
+except ImportError:
+AutoModelForCausalLM = None
+AutoTokenizer = None
+set_seed = None
+torch = None
+print("WARNING: Transformers or PyTorch not available. GPT-2 fallback provider will be disabled.")
+
+try:
+from dateutil.parser import parse as date_parse
+except ImportError:
+date_parse = None
+print("WARNING: dateutil not available. Date parsing functionality may be limited.")
+
+try:
+from tqdm import tqdm
+except ImportError:
+tqdm = None
+print("WARNING: tqdm not available. Progress bars will be disabled.")
+
+try:
+import gradio as gr
+except ImportError:
+gr = None
+print("WARNING: Gradio not available. The web UI will be disabled and AKS will run in console-only mode.")
+
+# --- Configuration System ---
+class Config:
+""" Centralized configuration management system for the Autonomous Knowledge System.
+Manages paths, API keys, system parameters, and ensures directory setup.
+"""
+def __init__(self):
+self._config_version: str = "1.5" # Updated version to reflect changes
+
+# Repository Configuration
+self._repo_owner: str = os.getenv("GITHUB_REPO_OWNER") or "Craig444444444"
+self._repo_name: str = os.getenv("GITHUB_REPO_NAME") or "Autonomous-Knowledge-System"
+self._repo_url: str = f"https://github.com/{self._repo_owner}/{self._repo_name}.git"
+self._repo_path: Path = Path(os.getenv("REPO_CLONE_PATH", "/content")) / self._repo_name
+
+# Directory Configuration
+self._monitor_dir: Path = Path(os.getenv("MONITOR_DIR", "/content"))
+self._user_feedback_dir: Path = self._repo_path / "user_feedback"
+self._archive_dir: Path = self._repo_path / "archive"
+self._temp_dir: Path = self._repo_path / "temp"
+self._knowledge_base_dir: Path = self._repo_path / "knowledge_base"
+self._snapshot_dir: Path = self._repo_path / "snapshots"
+self._quarantine_dir: Path = self._repo_path / "quarantine"
+self._user_uploads_dir: Path = self._repo_path / "user_uploads"
+self._vector_db_dir: Path = self._repo_path / "vector_db"
+self._api_cache_dir: Path = self._repo_path / "api_cache" # New: API cache directory
+
+# System configuration
+self._log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+self._github_token: Optional[str] = os.getenv("GITHUB_TOKEN")
+self._gemini_key: Optional[str] = os.getenv("GEMINI_API_KEY")
+self._cycle_interval: int = int(os.getenv("CYCLE_INTERVAL", DEFAULT_CYCLE_INTERVAL))
+self._max_snapshots: int = int(os.getenv("MAX_SNAPSHOTS", 5))
+self._max_branches: int = int(os.getenv("MAX_BRANCHES", 10))
+self._push_interval: int = int(os.getenv("PUSH_INTERVAL", 60))
+self._ai_activity_chance: float = float(os.getenv("AI_ACTIVITY_CHANCE", 0.7))
+self._api_max_retries: int = int(os.getenv("API_MAX_RETRIES", MAX_API_RETRIES))
+self._max_plugins: int = int(os.getenv("MAX_PLUGINS", 10))
+self._max_concurrent_tasks: int = int(os.getenv("MAX_CONCURRENT_TASKS", 5))
+self._api_cache_expiry_seconds: int = int(os.getenv("API_CACHE_EXPIRY_SECONDS", 3600)) # New: API cache expiry
+self._api_request_timeout: Tuple[int, int] = (int(os.getenv("API_CONNECT_TIMEOUT", 10)), int(os.getenv("API_READ_TIMEOUT", 30))) # New: API request timeout
+self._task_timeout_seconds: int = int(os.getenv("TASK_TIMEOUT_SECONDS", 300)) # New: Orchestrator task timeout
+self._agent_heartbeat_interval: int = int(os.getenv("AGENT_HEARTBEAT_INTERVAL", 30)) # New: Orchestrator agent heartbeat
+
+# Preferred models list
+self._preferred_models: List[str] = []
+if self._gemini_key:
+self._preferred_models.append("gemini-1.5-pro-latest")
+if AutoModelForCausalLM is not None and AutoTokenizer is not None and torch is not None:
+self._preferred_models.append("gpt2")
+if not self._preferred_models:
+print("WARNING: No AI models configured or available. Please provide a Gemini API key or ensure transformers/pytorch are installed.")
+
+# Enhanced scraper configuration
+self._scraper_config = {
+'user_agent': os.getenv("SCRAPER_USER_AGENT", 'AKSBot/1.0 (https://github.com/Craig444444444/Autonomous-Knowledge-System)'),
+'max_retries': int(os.getenv("SCRAPER_MAX_RETRIES", 3)),
+'retry_delay': int(os.getenv("SCRAPER_RETRY_DELAY", 5)),
+'extraction_tags': json.loads(os.getenv("SCRAPER_EXTRACTION_TAGS", '["p", "h1", "h2", "h3", "article"]')),
+'max_links': int(os.getenv("SCRAPER_MAX_LINKS", 15)),
+'timeout': int(os.getenv("SCRAPER_TIMEOUT", 30))
+}
+
+# New vector database configuration
+self._vector_db_config = {
+'embedding_model': os.getenv("VECTOR_DB_EMBEDDING_MODEL", 'all-MiniLM-L6-v2'),
+'max_connections': int(os.getenv("VECTOR_DB_MAX_CONNECTIONS", 10)),
+'persist_interval': int(os.getenv("VECTOR_DB_PERSIST_INTERVAL", 300))
+}
+
+self._setup_directories()
+
+def _setup_directories(self):
+"""Create required directories and set appropriate permissions."""
+dirs = [
+self._repo_path,
+self._snapshot_dir,
+self._repo_path / "logs",
+self._user_feedback_dir,
+self._archive_dir,
+self._temp_dir,
+self._knowledge_base_dir,
+self._quarantine_dir,
+self._user_uploads_dir,
+self._vector_db_dir,
+self._api_cache_dir
+]
+for dir_path in dirs:
+try:
+dir_path.mkdir(parents=True, exist_ok=True)
+dir_path.chmod(0o755)
+except OSError as e:
+sys.stderr.write(f"CRITICAL ERROR: Failed to create or set permissions for directory {dir_path}: {e}\n")
+sys.exit(1)
+
+@property
+def config_version(self) -> str:
+return self._config_version
+@property
+def repo_owner(self) -> str:
+return self._repo_owner
+@repo_owner.setter
+def repo_owner(self, value: str):
+if not value: return
+self._repo_owner = value
+self._repo_url = f"https://github.com/{self._repo_owner}/{self._repo_name}.git"
+@property
+def repo_name(self) -> str:
+return self._repo_name
+@repo_name.setter
+def repo_name(self, value: str):
+if not value: return
+self._repo_name = value
+self._repo_url = f"https://github.com/{self._repo_owner}/{self._repo_name}.git"
+self._repo_path = Path(os.getenv("REPO_CLONE_PATH", "/content")) / self._repo_name
+@property
+def repo_url(self) -> str:
+return self._repo_url
+@property
+def repo_path(self) -> Path:
+return self._repo_path
+@property
+def monitor_dir(self) -> Path:
+return self._monitor_dir
+@property
+def user_feedback_dir(self) -> Path:
+return self._user_feedback_dir
+@property
+def archive_dir(self) -> Path:
+return self._archive_dir
+@property
+def temp_dir(self) -> Path:
+return self._temp_dir
+@property
+def knowledge_base_dir(self) -> Path:
+return self._knowledge_base_dir
+@property
+def snapshot_dir(self) -> Path:
+return self._snapshot_dir
+@property
+def quarantine_dir(self) -> Path:
+return self._quarantine_dir
+@property
+def user_uploads_dir(self) -> Path:
+return self._user_uploads_dir
+@property
+def vector_db_dir(self) -> Path:
+return self._vector_db_dir
+@property
+def api_cache_dir(self) -> Path:
+return self._api_cache_dir
+@property
+def log_level(self) -> str:
+return self._log_level
+@property
+def github_token(self) -> Optional[str]:
+return self._github_token
+@github_token.setter
+def github_token(self, value: str):
+self._github_token = value
+@property
+def gemini_key(self) -> Optional[str]:
+return self._gemini_key
+@gemini_key.setter
+def gemini_key(self, value: str):
+self._gemini_key = value
+@property
+def cycle_interval(self) -> int:
+return self._cycle_interval
+@property
+def max_snapshots(self) -> int:
+return self._max_snapshots
+@property
+def max_branches(self) -> int:
+return self._max_branches
+@property
+def push_interval(self) -> int:
+return self._push_interval
+@property
+def ai_activity_chance(self) -> float:
+return self._ai_activity_chance
+@property
+def api_max_retries(self) -> int:
+return self._api_max_retries
+@property
+def max_plugins(self) -> int:
+return self._max_plugins
+@property
+def max_concurrent_tasks(self) -> int:
+return self._max_concurrent_tasks
+@property
+def api_cache_expiry_seconds(self) -> int:
+return self._api_cache_expiry_seconds
+@property
+def api_request_timeout(self) -> Tuple[int, int]:
+return self._api_request_timeout
+@property
+def task_timeout_seconds(self) -> int:
+return self._task_timeout_seconds
+@property
+def agent_heartbeat_interval(self) -> int:
+return self._agent_heartbeat_interval
+@property
+def preferred_models(self) -> List[str]:
+return self._preferred_models
+@property
+def scraper_config(self) -> Dict[str, Any]:
+return self._scraper_config
+@property
+def vector_db_config(self) -> Dict[str, Any]:
+return self._vector_db_config
+
+def validate(self) -> List[str]:
+"""Validate configuration and return errors."""
+errors = []
+if not self._repo_owner:
+errors.append("Missing required configuration: repo_owner")
+if not self._repo_name:
+errors.append("Missing required configuration: repo_name")
+if not self._repo_path.is_absolute():
+errors.append("Configuration error: repo_path must be an absolute path.")
+
+if not os.access(self._repo_path.parent, os.W_OK):
+errors.append(f"Permission error: Cannot write to base directory '{self._repo_path.parent}' for repository cloning.")
+
+if not self._github_token:
+errors.append("GitHub token is required for remote repository operations.")
+
+if not self._preferred_models:
+errors.append("No AI providers are configured or available. Please provide a Gemini API key or ensure transformers/pytorch are installed.")
+elif "gpt2" not in self._preferred_models and not self._gemini_key:
+errors.append("Gemini API key is required unless GPT-2 (transformers/pytorch) is the only configured model.")
+
+for dir_prop in ["user_feedback_dir", "archive_dir", "temp_dir", "knowledge_base_dir", "snapshot_dir", "quarantine_dir", "user_uploads_dir", "vector_db_dir", "api_cache_dir"]:
+dir_path = getattr(self, dir_prop)
+if not dir_path.is_absolute():
+errors.append(f"Configuration error: {dir_prop} must be an absolute path (derived from repo_path).")
+
+if not isinstance(self._cycle_interval, int) or self._cycle_interval <= 0:
+errors.append("cycle_interval must be a positive integer.")
+if not isinstance(self._max_snapshots, int) or self._max_snapshots <= 0:
+errors.append("max_snapshots must be a positive integer.")
+if not isinstance(self._ai_activity_chance, float) or not (0.0 <= self._ai_activity_chance <= 1.0):
+errors.append("ai_activity_chance must be a float between 0.0 and 1.0.")
+
+return errors
+
+def to_dict(self) -> Dict[str, Any]:
+"""Convert configuration to dictionary, redacting sensitive data."""
+return {
+"config_version": self._config_version,
+"repository": {
+"owner": self._repo_owner,
+"name": self._repo_name,
+"url": self._repo_url,
+"path": str(self._repo_path),
+"monitor_dir": str(self._monitor_dir),
+"user_feedback_dir": str(self._user_feedback_dir),
+"archive_dir": str(self._archive_dir),
+"temp_dir": str(self._temp_dir),
+"knowledge_base_dir": str(self._knowledge_base_dir),
+"snapshot_dir": str(self._snapshot_dir),
+"quarantine_dir": str(self._quarantine_dir),
+"user_uploads_dir": str(self._user_uploads_dir),
+"vector_db_dir": str(self._vector_db_dir),
+"api_cache_dir": str(self._api_cache_dir)
+},
+"api": {
+"github_token": "***REDACTED***" if self._github_token else None,
+"gemini_key": "***REDACTED***" if self._gemini_key else None,
+},
+"system": {
+"log_level": self._log_level,
+"max_branches": self._max_branches,
+"max_snapshots": self._max_snapshots,
+"cycle_interval": self._cycle_interval,
+"push_interval": self._push_interval,
+"ai_activity_chance": self._ai_activity_chance,
+"api_max_retries": self._api_max_retries,
+"preferred_models": self._preferred_models,
+"max_plugins": self._max_plugins,
+"max_concurrent_tasks": self._max_concurrent_tasks,
+"api_cache_expiry_seconds": self._api_cache_expiry_seconds,
+"api_request_timeout": self._api_request_timeout,
+"task_timeout_seconds": self._task_timeout_seconds,
+"agent_heartbeat_interval": self._agent_heartbeat_interval,
+"scraper_config": self._scraper_config,
+"vector_db_config": self._vector_db_config
+}
+}
+
+# Initialize config immediately so it's available for logging setup
+config = Config()
+
+# --- Logging System ---
+class ColoredFormatter(logging.Formatter):
+"""Custom colored formatter for console output."""
+COLORS = {
+'DEBUG': '\033[96m',
+'INFO': '\033[92m',
+'WARNING': '\033[93m',
+'ERROR': '\033[91m',
+'CRITICAL': '\033[95m',
+'RESET': '\033[0m'
+}
+
+def format(self, record):
+log_message = super().format(record)
+if sys.stdout.isatty() or os.environ.get('COLAB_GPU', False):
+return f"{self.COLORS.get(record.levelname, '')}{log_message}{self.COLORS['RESET']}"
+return log_message
+
+class LogManager:
+"""Enhanced logging manager with file rotation and colored output."""
+def __init__(self, name: str = "aks"):
+self.logger = logging.getLogger(name)
+self.logger.setLevel(config.log_level)
+
+for handler in self.logger.handlers[:]:
+self.logger.removeHandler(handler)
+handler.close()
+
+self._setup_handlers()
+self._start_time = time.time()
+
+def _setup_handlers(self):
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(config.log_level)
+console_formatter = ColoredFormatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+console_handler.setFormatter(console_formatter)
+self.logger.addHandler(console_handler)
+
+log_dir = config.repo_path / "logs"
+log_file = log_dir / "aks.log"
+try:
+log_dir.mkdir(parents=True, exist_ok=True)
+file_handler = RotatingFileHandler(
+filename=log_file,
+maxBytes=MAX_LOG_SIZE,
+backupCount=MAX_LOG_BACKUPS,
+encoding='utf-8'
+)
+file_handler.setLevel(logging.DEBUG)
+file_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+file_handler.setFormatter(file_formatter)
+self.logger.addHandler(file_handler)
+except Exception as e:
+self.logger.error(f"Failed to setup file logger at {log_file}: {e}", exc_info=True)
+
+def _get_uptime(self) -> float:
+return time.time() - self._start_time
+
+def debug(self, message: str, *args, **kwargs):
+self.logger.debug(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def info(self, message: str, *args, **kwargs):
+self.logger.info(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def warning(self, message: str, *args, **kwargs):
+self.logger.warning(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def error(self, message: str, *args, **kwargs):
+self.logger.error(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def critical(self, message: str, *args, **kwargs):
+self.logger.critical(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def exception(self, message: str, *args, **kwargs):
+self.logger.exception(message, *args, exc_info=True, **kwargs)
+
+LOGGER = LogManager()
+
+# --- AI Provider Implementation ---
+class AIProvider:
+"""Base class for AI providers with common functionality."""
+def __init__(self, name: str, api_key: Optional[str] = None):
+self.name = name
+self.api_key = api_key
+self.last_used = 0
+self.usage_count = 0
+self.error_count = 0
+self.rate_limit = 60
+self.active = True
+self.quota_exceeded = False
+self.model_access_issue = False
+self.logger = logging.getLogger(f"AIProvider.{name}")
+
+def is_available(self) -> bool:
+if not self.active or self.quota_exceeded or self.model_access_issue:
+return False
+if (time.time() - self.last_used) < (60 / self.rate_limit):
+return False
+return True
+
+def record_usage(self, success: bool = True):
+self.last_used = time.time()
+self.usage_count += 1
+if not success:
+self.error_count += 1
+if self.error_count > 5:
+self.active = False
+self.logger.warning(f"Provider {self.name} disabled due to too many consecutive errors.")
+else:
+self.error_count = 0
+
+def reset_status(self):
+self.error_count = 0
+self.active = True
+self.quota_exceeded = False
+self.model_access_issue = False
+self.logger.info(f"Provider {self.name} status reset.")
+
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 2048) -> Optional[str]:
+raise NotImplementedError("Subclasses must implement generate_text method.")
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+raise NotImplementedError("Subclasses must implement generate_code method.")
+
+def with_retries(func: Callable) -> Callable:
+"""
+Decorator to retry a function with exponential backoff for API calls.
+Uses config.api_max_retries and a backoff factor.
+"""
+def wrapper(*args, **kwargs):
+max_retries = kwargs.pop("max_retries", config.api_max_retries)
+backoff_factor = kwargs.pop("backoff_factor", 1.0)
+
+for attempt in range(max_retries + 1):
+try:
+return func(*args, **kwargs)
+except Exception as e:
+if attempt == max_retries:
+LOGGER.error(f"Function {func.__name__} failed after {max_retries} retries: {e}", exc_info=True)
+raise
+wait_time = backoff_factor * (2 ** attempt) + random.uniform(0, 1)
+LOGGER.warning(f"Attempt {attempt + 1}/{max_retries + 1} for {func.__name__} failed. Retrying in {wait_time:.2f} seconds...")
+time.sleep(wait_time)
+return None # Should ideally raise if all retries fail
+return wrapper
+
+class GeminiProvider(AIProvider):
+"""Google Gemini API Provider."""
+def __init__(self, api_key: str):
+super().__init__("Gemini", api_key)
+self.model: Optional[genai.GenerativeModel] = None
+self._initialize()
+
+def _initialize(self):
+if genai is None:
+self.logger.warning("Google Generative AI package not installed, GeminiProvider disabled.")
+self.active = False
+return
+if not self.api_key:
+self.logger.warning("Gemini API key not provided, GeminiProvider disabled.")
+self.active = False
+return
+try:
+genai.configure(api_key=self.api_key)
+self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
+# Test a small generation to verify API key and model access
+self.model.generate_content("test", generation_config=genai.types.GenerationConfig(max_output_tokens=1))
+self.active = True
+self.logger.info("Gemini provider initialized successfully.")
+except Exception as e:
+self.logger.error(f"Gemini client initialization failed: {e}", exc_info=True)
+self.active = False
+self.model_access_issue = True
+
+@with_retries
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 2048) -> Optional[str]:
+if not self.is_available() or not self.model:
+self.logger.warning("GeminiProvider is not available for text generation.")
+return None
+try:
+messages = [
+{"role": "system", "parts": [system_prompt]},
+{"role": "user", "parts": [prompt]}
+]
+generation_config = genai.types.GenerationConfig(
+temperature=0.7,
+max_output_tokens=max_tokens
+)
+response = self.model.generate_content(messages, generation_config=generation_config)
+
+if response.candidates and response.candidates[0].content.parts:
+self.record_usage(True)
+return response.candidates[0].content.parts[0].text.strip()
+else:
+block_reason = response.prompt_feedback.block_reason.name if response.prompt_feedback else 'Unknown'
+self.logger.warning(f"Gemini generation returned no content. Reason: {block_reason}")
+self.record_usage(False)
+return None
+except genai.types.model_error.BlockedPromptException as e:
+self.logger.error(f"Gemini prompt blocked: {e}")
+self.record_usage(False)
+return None
+except Exception as e:
+self.logger.error(f"Unexpected error during Gemini text generation: {e}", exc_info=True)
+self.record_usage(False)
+raise # Re-raise to trigger decorator retry
+
+@with_retries
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+code_system_prompt = f"You are an expert Python programmer. Only output valid Python code, without any conversational text or markdown code blocks, unless specifically requested. {system_prompt}"
+result = self.generate_text(prompt, code_system_prompt, max_tokens)
+
+if result:
+# Attempt to extract code if wrapped in markdown
+if "```python" in result:
+code_match = re.search(r"```python\s*(.*?)\s*```", result, re.DOTALL)
+if code_match:
+return code_match.group(1).strip()
+elif "```" in result: # Generic code block
+code_match = re.search(r"```\s*(.*?)\s*```", result, re.DOTALL)
+if code_match:
+return code_match.group(1).strip()
+return result.strip()
+return None
+
+class FreeAIProvider(AIProvider):
+"""Free AI provider using GPT-2 from Hugging Face Transformers."""
+def __init__(self):
+super().__init__("FreeAI_GPT2", api_key="free")
+self.model = None
+self.tokenizer = None
+self.device = "cuda" if torch and torch.cuda.is_available() else "cpu"
+self._initialize()
+
+def _initialize(self):
+if AutoModelForCausalLM is None or AutoTokenizer is None or torch is None:
+self.logger.warning("Transformers or PyTorch not imported. FreeAIProvider disabled.")
+self.active = False
+return
+try:
+model_name = "gpt2"
+self.logger.info(f"Attempting to load free AI model: {model_name} on {self.device.upper()}")
+self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+if self.tokenizer.pad_token is None: # GPT-2 doesn't have a pad_token by default
+self.tokenizer.pad_token = self.tokenizer.eos_token
+self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
+self.active = True
+self.logger.info("Free AI provider (GPT-2) initialized successfully.")
+except Exception as e:
+self.logger.error(f"Failed to initialize Free AI provider (GPT-2): {e}", exc_info=True)
+self.active = False
+
+@with_retries
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 500) -> Optional[str]:
+if not self.is_available() or not self.model:
+self.logger.warning("FreeAIProvider is not available for text generation.")
+return None
+try:
+full_prompt = f"{system_prompt}\n\n{prompt}"
+max_input_length = self.tokenizer.model_max_length - max_tokens - 10 # Reserve tokens for output and buffer
+inputs = self.tokenizer(full_prompt, return_tensors="pt", truncation=True, max_length=max_input_length).to(self.device)
+
+if set_seed: set_seed(42) # For reproducibility if needed
+
+outputs = self.model.generate(
+inputs.input_ids,
+max_new_tokens=max_tokens,
+temperature=0.7,
+do_sample=True,
+pad_token_id=self.tokenizer.eos_token_id,
+num_return_sequences=1
+)
+generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+# Remove the prompt from the generated text
+if generated.startswith(full_prompt):
+generated = generated[len(full_prompt):].strip()
+
+if not generated.strip():
+self.logger.warning("FreeAIProvider generated empty content.")
+self.record_usage(False)
+return None
+self.record_usage(True)
+return generated
+except Exception as e:
+self.logger.error(f"Free AI text generation failed: {e}", exc_info=True)
+self.record_usage(False)
+raise # Re-raise to trigger decorator retry
+
+@with_retries
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 500) -> Optional[str]:
+if not self.is_available():
+return None
+code_system_prompt = f"# Generate Python code only, no explanations, no markdown wrappers.\n{system_prompt}"
+result = self.generate_text(prompt, code_system_prompt, max_tokens)
+
+if result:
+# Attempt to extract code if wrapped in markdown
+if "```python" in result:
+match = re.search(r"```python\s*(.*?)\s*```", result, re.DOTALL)
+result = match.group(1).strip() if match else result
+elif "```" in result: # Generic code block
+match = re.search(r"```\s*(.*?)\s*```", result, re.DOTALL)
+result = match.group(1).strip() if match else result
+
+if not result.strip():
+self.record_usage(False)
+self.logger.warning("FreeAIProvider generated empty or whitespace-only code.")
+return None
+try:
+ast.parse(result) # Validate Python syntax
+self.record_usage(True)
+return result
+except SyntaxError as e:
+self.record_usage(False)
+self.logger.warning(f"FreeAIProvider generated invalid Python syntax: {e}. Code:\n{result}")
+return None
+self.record_usage(False)
+return None
+
+class AIProviderManager:
+"""Manages AI providers with fallback, prioritizing according to preferred_models list."""
+def __init__(self, preferred_models: List[str]):
+self.providers: List[AIProvider] = []
+self.preferred_models = preferred_models
+self.initialize_providers()
+
+def initialize_providers(self):
+self.providers = []
+if config.gemini_key and genai is not None:
+self.providers.append(GeminiProvider(config.gemini_key))
+if AutoModelForCausalLM is not None and AutoTokenizer is not None and torch is not None:
+self.providers.append(FreeAIProvider())
+
+# Sort providers based on preference
+def sort_key(provider):
+try:
+# Normalize provider name for comparison (e.g., 'FreeAI_GPT2' -> 'gpt2')
+return self.preferred_models.index(provider.name.lower().replace("freeai_", ""))
+except ValueError:
+return len(self.preferred_models) # Put unlisted providers at the end
+
+self.providers.sort(key=sort_key)
+
+LOGGER.info(f"Initialized {len(self.providers)} AI providers.")
+LOGGER.info(f"Provider order: {[p.name for p in self.providers if p.active]} (Inactive: {[p.name for p in self.providers if not p.active]})")
+
+def _execute_with_backoff(self, method_name: str, prompt: str, system_prompt: str, max_tokens: int) -> Optional[str]:
+for provider in self.providers:
+if provider.active and provider.is_available():
+generate_method = getattr(provider, method_name)
+try:
+LOGGER.debug(f"Attempting {method_name} with {provider.name}...")
+result = generate_method(prompt, system_prompt, max_tokens)
+if result is not None:
+return result
+else:
+LOGGER.warning(f"{provider.name} returned None for {method_name}. Trying next provider.")
+except Exception as e:
+LOGGER.warning(f"Provider {provider.name} failed for {method_name}: {e}. Trying next provider.", exc_info=False)
+continue # Try next provider on exception
+LOGGER.error("All available providers failed for generation.")
+return None
+
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 2048) -> Optional[str]:
+return self._execute_with_backoff("generate_text", prompt, system_prompt, max_tokens)
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+return self._execute_with_backoff("generate_code", prompt, system_prompt, max_tokens)
+def has_available_providers(self) -> bool:
+return any(provider.active and provider.is_available() for provider in self.providers)
+
+def get_provider_status(self) -> Dict[str, str]:
+status = {}
+for provider in self.providers:
+status_text = "Available"
+if not provider.active:
+status_text = "Disabled (Too many errors)"
+elif provider.quota_exceeded:
+status_text = "Unavailable (Quota Exceeded)"
+elif provider.model_access_issue:
+status_text = "Unavailable (Model Access Issue)"
+elif not provider.is_available():
+status_text = "Unavailable (Inactive or Rate Limited)"
+status[provider.name] = status_text
+return status
+
+def reset_all_provider_statuses(self):
+"""Resets the status of all managed AI providers."""
+for provider in self.providers:
+provider.reset_status()
+LOGGER.info("All AI provider statuses have been reset.")
+
+# --- File Handler ---
+class FileHandler:
+""" Handles file system operations within the repository.
+Manages file reads, writes, copies, moves, deletes, and archive operations.
+"""
+def __init__(self, repo_path: Path, logger_instance: Optional[logging.Logger] = None):
+self.repo_path = repo_path
+self.logger = logger_instance if logger_instance else LOGGER
+self.logger.info("FileHandler initialized.")
+
+def get_file_content(self, file_path: Path) -> Optional[str]:
+"""Reads content from a file."""
+if not file_path.exists():
+self.logger.error(f"File not found for reading: {file_path}")
+return None
+try:
+return file_path.read_text(encoding='utf-8')
+except UnicodeDecodeError as e:
+self.logger.error(f"UnicodeDecodeError reading {file_path}: {e}. Trying latin-1.")
+try:
+return file_path.read_text(encoding='latin-1') # Fallback for common encodings
+except Exception as e_fallback:
+self.logger.error(f"Failed to read file {file_path} with fallback encoding: {e_fallback}")
+return None
+except Exception as e:
+self.logger.error(f"Failed to read file content from {file_path}: {e}", exc_info=True)
+return None
+
+def write_file(self, file_path: Path, content: str) -> bool:
+"""Writes content to a file."""
+try:
+file_path.parent.mkdir(parents=True, exist_ok=True)
+file_path.write_text(content, encoding='utf-8')
+return True
+except Exception as e:
+self.logger.error(f"Failed to write file content to {file_path}: {e}", exc_info=True)
+return False
+
+def file_exists(self, file_path: Path) -> bool:
+"""Checks if a file exists."""
+return file_path.exists()
+
+def copy_file(self, src: Path, dst: Path) -> bool:
+"""Copies a file from src to dst."""
+if not src.exists():
+self.logger.error(f"Source file for copy not found: {src}")
+return False
+try:
+dst.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2(src, dst)
+self.logger.debug(f"Copied {src} to {dst}")
+return True
+except Exception as e:
+self.logger.error(f"copy_file failed for {src} to {dst}: {e}", exc_info=True)
+return False
+
+def move_file(self, src: Path, dst: Path) -> bool:
+"""Moves a file from src to dst."""
+if not src.exists():
+self.logger.error(f"Source file for move not found: {src}")
+return False
+try:
+dst.parent.mkdir(parents=True, exist_ok=True)
+shutil.move(src, dst)
+self.logger.debug(f"Moved {src} to {dst}")
+return True
+except Exception as e:
+self.logger.error(f"move_file failed for {src} to {dst}: {e}", exc_info=True)
+return False
+
+def delete_file(self, file_path: Path) -> bool:
+"""Deletes a file."""
+if not file_path.exists():
+self.logger.warning(f"Attempted to delete non-existent file: {file_path}")
+return False
+try:
+file_path.unlink()
+self.logger.info(f"Deleted file: {file_path}")
+return True
+except Exception as e:
+self.logger.error(f"Failed to delete file {file_path}: {e}", exc_info=True)
+return False
+
+def delete_directory(self, dir_path: Path) -> bool:
+"""Deletes a directory and its contents."""
+if not dir_path.exists():
+self.logger.warning(f"Attempted to delete non-existent directory: {dir_path}")
+return False
+try:
+shutil.rmtree(dir_path)
+self.logger.info(f"Deleted directory: {dir_path}")
+return True
+except Exception as e:
+self.logger.error(f"Failed to delete directory {dir_path}: {e}", exc_info=True)
+return False
+
+def copy_to_repo(self, src_path: Path, dest_subdir: str = "user_uploads") -> Optional[Path]:
+"""Copies a file from src to a subdirectory within the repository."""
+dest_dir = self.repo_path / dest_subdir
+dest_dir.mkdir(parents=True, exist_ok=True)
+destination_file_path = dest_dir / src_path.name
+if self.copy_file(src_path, destination_file_path):
+self.logger.info(f"User file '{src_path.name}' copied to repository: {destination_file_path}")
+return destination_file_path
+return None
+
+def archive_directory(self, src_dir: Path, dest_dir: Path) -> bool:
+"""Archives a directory by moving its contents."""
+try:
+if not src_dir.exists():
+self.logger.warning(f"Source directory for archiving does not exist: {src_dir}")
+return False
+dest_dir.mkdir(parents=True, exist_ok=True)
+for item in src_dir.iterdir():
+shutil.move(str(item), str(dest_dir / item.name))
+self.logger.info(f"Archived contents of {src_dir} to {dest_dir}")
+return True
+except Exception as e:
+self.logger.error(f"Archiving directory {src_dir} failed: {e}", exc_info=True)
+return False
+
+# --- Vector Database ---
+class VectorDB:
+"""
+Manages a vector database for semantic search and context retrieval.
+This stub uses sentence-transformers and a simple in-memory store for demonstration.
+For production, integrate with Chroma, Pinecone, etc.
+"""
+def __init__(self, db_dir: Path, db_config: Dict[str, Any], logger_instance: Optional[logging.Logger] = None):
+self.db_dir = db_dir
+self.db_config = db_config
+self._initialized = False
+self.logger = logger_instance if logger_instance else LOGGER
+self.embeddings_model = None
+self.documents: List[Dict[str, Any]] = [] # Simple in-memory store for documents
+self.vectors: List[Any] = [] # Simple in-memory store for vectors
+self.logger.info(f"VectorDB initialized at {db_dir} (using in-memory/stubbed components).")
+
+def initialize(self) -> None:
+"""Initializes the vector database and loads the embedding model."""
+self.db_dir.mkdir(parents=True, exist_ok=True)
+try:
+from sentence_transformers import SentenceTransformer
+self.embeddings_model = SentenceTransformer(self.db_config.get('embedding_model', 'all-MiniLM-L6-v2'))
+self.logger.info(f"VectorDB: Embedding model '{self.db_config.get('embedding_model')}' loaded.")
+self._initialized = True
+except ImportError:
+self.logger.error("SentenceTransformer not installed. VectorDB will operate without embeddings.")
+self._initialized = False
+except Exception as e:
+self.logger.error(f"Failed to load embedding model for VectorDB: {e}", exc_info=True)
+self._initialized = False
+self.logger.info("VectorDB initialized.")
+
+def is_initialized(self) -> bool:
+return self._initialized and self.embeddings_model is not None
+
+def _get_embedding(self, text: str) -> Optional[List[float]]:
+if not self.is_initialized():
+self.logger.warning("VectorDB not initialized, cannot get embedding.")
+return None
+try:
+return self.embeddings_model.encode(text).tolist()
+except Exception as e:
+self.logger.error(f"Failed to get embedding for text: {text[:50]}...: {e}", exc_info=True)
+return None
+
+def add_document(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+"""Adds a single document to the vector database."""
+if not self.is_initialized():
+self.logger.warning("VectorDB not initialized, cannot add documents.")
+return
+
+embedding = self._get_embedding(content)
+if embedding:
+doc_id = hashlib.sha256(content.encode()).hexdigest() # Simple ID generation
+self.documents.append({'id': doc_id, 'content': content, 'metadata': metadata or {}})
+self.vectors.append({'id': doc_id, 'vector': embedding})
+self.logger.debug(f"Added document {doc_id} to VectorDB.")
+else:
+self.logger.error(f"Failed to create embedding for document content: {content[:50]}...")
+
+def add_documents(self, documents: List[Dict[str, Any]]) -> None:
+"""Adds multiple documents to the vector database."""
+if not self.is_initialized():
+self.logger.warning("VectorDB not initialized, cannot add documents.")
+return
+
+contents = [doc['content'] for doc in documents]
+embeddings = self.embeddings_model.encode(contents).tolist()
+
+for i, doc in enumerate(documents):
+doc_id = hashlib.sha256(doc['content'].encode()).hexdigest()
+self.documents.append({'id': doc_id, 'content': doc['content'], 'metadata': doc.get('metadata', {})})
+self.vectors.append({'id': doc_id, 'vector': embeddings[i]})
+self.logger.info(f"Added {len(documents)} documents to VectorDB.")
+
+
+def query(self, query_text: str, top_k: int = 5) -> List[Any]:
+"""Queries the vector database for relevant documents."""
+if not self.is_initialized():
+self.logger.warning("VectorDB not initialized, cannot query.")
+return []
+if not self.vectors:
+self.logger.info("VectorDB is empty, no results for query.")
+return []
+
+query_embedding = self._get_embedding(query_text)
+if not query_embedding:
+return []
+
+# Simple cosine similarity search
+from scipy.spatial.distance import cosine
+
+similarities = []
+for doc_vec_entry in self.vectors:
+# Ensure vectors are of same dimension before calculating similarity
+if len(doc_vec_entry['vector']) == len(query_embedding):
+similarity = 1 - cosine(query_embedding, doc_vec_entry['vector'])
+similarities.append((similarity, doc_vec_entry['id']))
+
+similarities.sort(key=lambda x: x[0], reverse=True)
+
+results: List[Any] = []
+for sim, doc_id in similarities[:top_k]:
+for doc in self.documents:
+if doc['id'] == doc_id:
+# Create a simple object to mimic document chunk structure
+results.append(type('obj', (object,), {'page_content': doc['content'], 'metadata': doc['metadata'], 'similarity': sim})())
+break
+
+self.logger.debug(f"Queried VectorDB for '{query_text[:50]}...' (top_k={top_k}), found {len(results)} results.")
+return results
+
+def update_indexes(self) -> bool:
+"""Updates the vector database indexes. (Placeholder for real DB re-indexing)."""
+self.logger.info("VectorDB indexes updated (STUB - for real DB, this would rebuild/optimize).")
+return True
+
+def create_snapshot(self) -> None:
+"""Creates a snapshot of the vector database (placeholder for real DB backup)."""
+self.logger.info("VectorDB snapshot created (STUB).")
+
+def close(self) -> None:
+"""Closes the vector database connection."""
+self.logger.info("VectorDB closed (STUB).")
+
+# --- AI Generator (Enhanced) ---
+# This class now includes methods for code refactoring, documentation generation,
+# data transformation, and content summarization, with vector database integration.
+class AIGenerator:
+""" Handles AI-driven generation tasks with integrated file processing and sophisticated contextual understanding. """
+def __init__(self, ai_manager: Any, # AIProviderManager instance
+repo_path: Path,
+file_handler: Any, # FileHandler instance
+vector_db: Any, # VectorDB instance
+max_history: int = 50,
+logger_instance: Optional[logging.Logger] = None):
+""" Initialize AIGenerator with AI provider management, repository context, file handling, vector database, and an optional logger. """
+self.ai_manager = ai_manager
+self.repo_path = repo_path
+self.file_handler = file_handler
+self.vector_db = vector_db
+self.history: List[str] = []
+self.max_history = max_history
+self.logger = logger_instance if logger_instance else LOGGER
+self.logger.info("AI Generator initialized with file handling and vector database integration.")
+
+def _add_to_history(self, activity: str) -> None:
+"""Add timestamped activity to history."""
+entry = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {activity}"
+self.history.append(entry)
+if len(self.history) > self.max_history:
+self.history.pop(0)
+self.logger.debug(f"History updated: {activity}")
+
+def _validate_python(self, code: str) -> bool:
+"""Validate Python syntax using AST."""
+try:
+ast.parse(code)
+return True
+except SyntaxError as e:
+self.logger.warning(f"Invalid Python syntax detected:\n{e}\n--- Invalid Code ---:\n{code[:500]}...", exc_info=True)
+return False
+except Exception as e:
+self.logger.error(f"Unexpected error during Python syntax validation: {e}", exc_info=True)
+return False
+
+def get_recent_activities(self, count: int = 5) -> List[str]:
+"""Get recent generation activities."""
+if not self.history:
+return ["No history available."]
+return self.history[-count:][::-1]
+
+def generate_from_file(self, file_path: Path, prompt: str = "", system_prompt: str = "You are an AI assistant that processes and understands files.", max_tokens: int = 4096, use_vector_context: bool = True) -> Optional[str]:
+"""Generate content based on a file's content, optionally enriched with semantic context."""
+if not file_path.exists():
+self.logger.error(f"File not found: {file_path}")
+return None
+
+try:
+content = self.file_handler.get_file_content(file_path)
+if not content:
+self.logger.error(f"Could not read content from file: {file_path}")
+return None
+
+full_prompt_parts = [f"File Content from {file_path.name}:\n```\n{content}\n```"]
+
+if use_vector_context and self.vector_db and self.vector_db.is_initialized():
+self.logger.debug(f"Retrieving vector context for file: {file_path.name}")
+vector_query = f"Content from {file_path.name}:\n{content}\n\nUser request: {prompt}"
+retrieved_context = self.vector_db.query(vector_query, top_k=3)
+if retrieved_context:
+context_text = "\n".join([f"Relevant Context from Knowledge Base:\n```\n{c.page_content}\n```" for c in retrieved_context])
+full_prompt_parts.append(context_text)
+self.logger.debug(f"Added {len(retrieved_context)} context chunks from vector DB.")
+
+if prompt:
+full_prompt_parts.append(f"Additional Instructions from User: {prompt}")
+
+final_prompt = "\n\n".join(full_prompt_parts)
+
+result = self.ai_manager.generate_text(
+final_prompt,
+system_prompt,
+max_tokens
+)
+
+if result:
+self._add_to_history(f"Generated content from {file_path.name} with prompt: '{prompt[:50]}...'")
+return result
+self.logger.warning(f"AI generation from file '{file_path.name}' returned no content.")
+return None
+
+except Exception as e:
+self.logger.exception(f"Error during AI generation from file '{file_path}': {e}")
+return None
+
+def generate_new_code(self, requirements: str, context: str = "", file_type: str = "python", max_tokens: int = 4096, use_vector_context: bool = True) -> Optional[str]:
+"""Generate code from requirements, with optional context and semantic retrieval."""
+if not self.ai_manager.has_available_providers():
+self.logger.error("No AI providers available for code generation.")
+return None
+
+full_prompt_parts = [f"Generate {file_type} code based on the following requirements: {requirements}"]
+
+if use_vector_context and self.vector_db and self.vector_db.is_initialized():
+self.logger.debug("Retrieving vector context for code generation.")
+vector_query = f"Code requirements: {requirements}\nContext: {context}"
+retrieved_context = self.vector_db.query(vector_query, top_k=5)
+if retrieved_context:
+context_text = "\n".join([f"Relevant Code/Doc Context:\n```\n{c.page_content}\n```" for c in retrieved_context])
+full_prompt_parts.append(context_text)
+self.logger.debug(f"Added {len(retrieved_context)} context chunks from vector DB for code generation.")
+
+if context:
+full_prompt_parts.append(f"Additional Context: {context}")
+
+final_prompt = "\n\n".join(full_prompt_parts)
+
+system_prompt = f"You are an expert {file_type} developer. Provide only the raw {file_type} code without explanations, markdown wrappers, or conversational text unless absolutely necessary to disambiguate, and specifically requested."
+
+try:
+code = self.ai_manager.generate_code(
+final_prompt,
+system_prompt,
+max_tokens
+)
+
+if code:
+if file_type.lower() == "python":
+if self._validate_python(code):
+self._add_to_history(f"Generated new {file_type} code based on requirements: '{requirements[:50]}...'")
+return code
+else:
+self.logger.warning(f"Generated Python code failed syntax validation for requirements: '{requirements[:50]}...'")
+return None
+else:
+self._add_to_history(f"Generated new {file_type} code based on requirements: '{requirements[:50]}...'")
+return code
+self.logger.warning(f"AI returned no code for requirements: '{requirements[:50]}...'")
+return None
+except Exception as e:
+self.logger.exception(f"Error during code generation: {e}")
+return None
+
+def refactor_code(self, code_content: str, refactoring_goal: str, file_type: str = "python", max_tokens: int = 4096, use_vector_context: bool = True) -> Optional[str]:
+"""Refactor existing code based on a specific goal."""
+full_prompt_parts = [
+f"Refactor the following {file_type} code to {refactoring_goal}:",
+"```" + file_type + "\n" + code_content + "\n```"
+]
+
+if use_vector_context and self.vector_db and self.vector_db.is_initialized():
+self.logger.debug("Retrieving vector context for code refactoring.")
+vector_query = f"Refactoring goal: {refactoring_goal}\nCode snippet:\n{code_content[:200]}"
+retrieved_context = self.vector_db.query(vector_query, top_k=3)
+if retrieved_context:
+context_text = "\n".join([f"Relevant Refactoring Examples/Guidelines:\n```\n{c.page_content}\n```" for c in retrieved_context])
+full_prompt_parts.append(context_text)
+
+system_prompt = f"You are an expert {file_type} refactoring specialist. Provide only the refactored {file_type} code without explanations or markdown."
+
+try:
+refactored_code = self.ai_manager.generate_code(
+"\n\n".join(full_prompt_parts),
+system_prompt,
+max_tokens
+)
+
+if refactored_code:
+if file_type.lower() == "python":
+if self._validate_python(refactored_code):
+self._add_to_history(f"Refactored {file_type} code for goal: '{refactoring_goal[:50]}...'")
+return refactored_code
+else:
+self.logger.warning(f"Refactored Python code failed syntax validation for goal: '{refactoring_goal[:50]}...'")
+return None
+else:
+self._add_to_history(f"Refactored {file_type} code for goal: '{refactoring_goal[:50]}...'")
+return refactored_code
+self.logger.warning(f"AI returned no refactored code for goal: '{refactoring_goal[:50]}...'")
+return None
+except Exception as e:
+self.logger.exception(f"Error during code refactoring: {e}")
+return None
+
+def generate_documentation(self, content: str, content_type: str = "code", max_tokens: int = 1024, target_format: str = "markdown", use_vector_context: bool = True) -> Optional[str]:
+"""Generate comprehensive documentation for various content types, with optional semantic context."""
+full_prompt_parts = [
+f"Create comprehensive documentation in {target_format} format for this {content_type}:",
+"```" + content_type + "\n" + content + "\n```",
+"Include purpose, usage examples, parameters (if code), and any other relevant details."
+]
+
+if use_vector_context and self.vector_db and self.vector_db.is_initialized():
+self.logger.debug("Retrieving vector context for documentation generation.")
+vector_query = f"Documentation request for {content_type}:\n{content[:200]}"
+retrieved_context = self.vector_db.query(vector_query, top_k=2)
+if retrieved_context:
+context_text = "\n".join([f"Relevant Documentation Standards/Examples:\n```\n{c.page_content}\n```" for c in retrieved_context])
+full_prompt_parts.append(context_text)
+
+system_prompt = f"You are an expert technical documentation writer, specialized in {content_type} documentation in {target_format} format. Provide only the documentation content."
+
+try:
+documentation = self.ai_manager.generate_text(
+"\n\n".join(full_prompt_parts),
+system_prompt,
+max_tokens
+)
+if documentation:
+self._add_to_history(f"Generated documentation for {content_type}: '{content[:50]}...'")
+return documentation
+self.logger.warning(f"AI returned no documentation for {content_type}: '{content[:50]}...'")
+return None
+except Exception as e:
+self.logger.exception(f"Error during documentation generation: {e}")
+return None
+
+def generate_data_transformation(self, source_data: str, source_format: str, target_format: str, transformation_instructions: str = "", max_tokens: int = 2048, use_vector_context: bool = True) -> Optional[str]:
+"""Convert data between formats, optionally applying transformation instructions and semantic context."""
+full_prompt_parts = [
+f"Convert the following data from {source_format} to {target_format} format:",
+"```" + source_format + "\n" + source_data + "\n```"
+]
+
+if transformation_instructions:
+full_prompt_parts.append(f"Follow these transformation instructions: {transformation_instructions}")
+
+if use_vector_context and self.vector_db and self.vector_db.is_initialized():
+self.logger.debug("Retrieving vector context for data transformation.")
+vector_query = f"Data transformation from {source_format} to {target_format}.\nData snippet:\n{source_data[:200]}"
+retrieved_context = self.vector_db.query(vector_query, top_k=2)
+if retrieved_context:
+context_text = "\n".join([f"Relevant Transformation Examples:\n```\n{c.page_content}\n```" for c in retrieved_context])
+full_prompt_parts.append(context_text)
+
+final_prompt = "\n\n".join(full_prompt_parts)
+system_prompt = f"You are an expert data conversion specialist. Provide only the converted output in {target_format} format without explanations or markdown."
+
+try:
+converted_data = self.ai_manager.generate_text(
+final_prompt,
+system_prompt,
+max_tokens
+)
+if converted_data:
+self._add_to_history(f"Converted data from {source_format} to {target_format}")
+return converted_data
+self.logger.warning(f"AI returned no converted data for source format '{source_format}' to target '{target_format}'.")
+return None
+except Exception as e:
+self.logger.exception(f"Error during data transformation: {e}")
+return None
+
+def import_user_file(self, src_path: Path, dest_subdir: str = "user_uploads") -> Optional[Path]:
+"""Copy user file into a designated repository workspace subdirectory."""
+if not src_path.exists():
+self.logger.error(f"Source file for import not found: {src_path}")
+return None
+
+dest_dir = self.repo_path / dest_subdir
+dest_dir.mkdir(parents=True, exist_ok=True)
+
+destination_file_path = dest_dir / src_path.name
+if self.file_handler.copy_file(src_path, destination_file_path):
+self.logger.info(f"User file '{src_path.name}' copied to repository: {destination_file_path}")
+self._add_to_history(f"Imported user file: {src_path.name} to {dest_subdir}")
+return destination_file_path
+else:
+self.logger.error(f"Failed to copy user file from {src_path} to {destination_file_path}.")
+return None
+
+def summarize_content(self, content: str, summary_length: str = "brief", content_type: str = "text", max_tokens: int = 1024, use_vector_context: bool = True) -> Optional[str]:
+"""Generate a summary of provided content."""
+full_prompt_parts = [
+f"Summarize the following {content_type} in a {summary_length} manner:",
+"```" + content_type + "\n" + content + "\n```"
+]
+
+if use_vector_context and self.vector_db and self.vector_db.is_initialized():
+self.logger.debug("Retrieving vector context for summarization.")
+vector_query = f"Summarize {content_type} about:\n{content[:500]}" # Increased query length
+retrieved_context = self.vector_db.query(vector_query, top_k=2)
+if retrieved_context:
+context_text = "\n".join([f"Additional Context:\n```\n{c.page_content}\n```" for c in retrieved_context])
+full_prompt_parts.append(context_text)
+
+system_prompt = f"You are an expert summarization AI. Provide a concise, accurate {summary_length} summary of the provided {content_type}."
+
+try:
+summary = self.ai_manager.generate_text(
+"\n\n".join(full_prompt_parts),
+system_prompt,
+max_tokens
+)
+if summary:
+self._add_to_history(f"Generated {summary_length} summary for {content_type}: '{content[:50]}...'")
+return summary
+self.logger.warning(f"AI returned no summary for {content_type}: '{content[:50]}...'")
+return None
+except Exception as e:
+self.logger.exception(f"Error during summarization: {e}")
+return None
+
+# --- API Handler ---
+class APIHandler:
+""" Centralized API handler for the Autonomous Knowledge System with:
+- Rate limiting per API
+- Request retries with exponential backoff and jitter
+- Authentication management (Token, API Key, HMAC)
+- Layered response caching (in-memory and on-disk)
+- Robust error handling and logging
+- Concurrent request handling (batching)
+"""
+
+DEFAULT_CACHE_EXPIRY_SECONDS = 3600
+DEFAULT_REQUEST_TIMEOUT_CONNECT = 10
+DEFAULT_REQUEST_TIMEOUT_READ = 30
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_BACKOFF_FACTOR = 1.0
+DEFAULT_RATE_LIMIT_RPM = 60
+
+def __init__(self, cache_dir: Optional[Path] = None, api_configs: Optional[Dict[str, Any]] = None, logger_instance: Optional[logging.Logger] = None, config_manager: Optional[Any] = None):
+self.logger = logger_instance if logger_instance else LOGGER
+self.config_manager = config_manager
+
+if cache_dir:
+self.cache_dir = cache_dir.resolve()
+else: # Derive cache_dir from config_manager or default
+self.cache_dir = self.config_manager.api_cache_dir if self.config_manager and hasattr(self.config_manager, 'api_cache_dir') else Path('/content/Autonomous-Knowledge-System').resolve() / "api_cache"
+
+self._setup_cache()
+
+self.rate_limits: Dict[str, Dict[str, Any]] = {}
+self.rate_limit_lock = threading.Lock()
+
+self.default_headers = {
+'User-Agent': 'AKS/1.0 (+https://github.com/Craig444444444/Autonomous-Knowledge-System)',
+'Accept': 'application/json',
+}
+
+self.api_configs: Dict[str, Dict[str, Any]] = {
+'github': {
+'base_url': 'https://api.github.com',
+'auth_type': 'token',
+'rate_limit_rpm': 30,
+'headers': {'X-GitHub-Api-Version': '2022-11-28'},
+},
+'gemini': {
+'base_url': 'https://generativelanguage.googleapis.com/v1beta',
+'auth_type': 'api_key',
+'rate_limit_rpm': 60,
+},
+'arxiv': {
+'base_url': 'http://export.arxiv.org/api',
+'auth_type': None,
+'rate_limit_rpm': 10,
+'response_parser': 'xml_to_json',
+'content_type': 'application/atom+xml'
+},
+'duckduckgosearch': {
+'base_url': 'https://api.duckduckgo.com',
+'auth_type': None,
+'rate_limit_rpm': 30,
+}
+}
+if api_configs:
+self.api_configs.update(api_configs)
+
+self.response_cache: Dict[str, Dict[str, Any]] = {}
+self.cache_expiry = self.config_manager.api_cache_expiry_seconds if self.config_manager else self.DEFAULT_CACHE_EXPIRY_SECONDS
+self.logger.info("API Handler initialized with caching and rate limiting.")
+
+def _setup_cache(self):
+"""Set up the cache directory structure."""
+try:
+self.cache_dir.mkdir(parents=True, exist_ok=True)
+(self.cache_dir / "responses").mkdir(exist_ok=True)
+(self.cache_dir / "errors").mkdir(exist_ok=True)
+self.logger.debug(f"API cache directories initialized at {self.cache_dir}")
+except Exception as e:
+self.logger.error(f"Failed to initialize API cache at {self.cache_dir}: {e}", exc_info=True)
+
+def _check_rate_limit(self, api_name: str, enforce_wait: bool = True) -> bool:
+"""Check if API call is within rate limits for the given API."""
+with self.rate_limit_lock:
+config_data = self.api_configs.get(api_name, {})
+limit_rpm = config_data.get('rate_limit_rpm', self.DEFAULT_RATE_LIMIT_RPM)
+limit_rps = limit_rpm / 60.0
+
+last_call = self.rate_limits.get(api_name, {}).get('last_call', 0)
+elapsed = time.time() - last_call
+
+if elapsed < (1.0 / limit_rps):
+wait_time = (1.0 / limit_rps) - elapsed
+if enforce_wait:
+self.logger.warning(f"Rate limit for {api_name} hit. Waiting for {wait_time:.2f} seconds.")
+time.sleep(wait_time)
+self.rate_limits[api_name]['last_call'] = time.time()
+return True
+else:
+self.rate_limits[api_name] = {'last_call': time.time(), 'limit_rpm': limit_rpm}
+return True
+
+def _generate_cache_key(self, api_name: str, endpoint: str, method: str, params: Optional[Dict], data: Optional[Dict]) -> str:
+"""Generate a unique cache key for API requests."""
+normalized_endpoint = endpoint.strip('/')
+param_str = urlencode(sorted(params.items())) if params else ''
+data_str = json.dumps(data, sort_keys=True) if data else ''
+
+request_str = f"{api_name}:{method}:{normalized_endpoint}:{param_str}:{data_str}"
+return hashlib.md5(request_str.encode('utf-8')).hexdigest()
+
+def _cache_response(self, key: str, response_data: Dict[str, Any], status_code: int):
+"""Cache API responses to memory and disk with timestamp."""
+try:
+cache_entry = {
+'timestamp': datetime.now().isoformat(),
+'response': response_data,
+'status': status_code
+}
+self.response_cache[key] = cache_entry
+
+cache_file = self.cache_dir / "responses" / f"{key}.json"
+with cache_file.open('w') as f:
+json.dump(cache_entry, f, indent=2)
+self.logger.debug(f"API response cached to {cache_file}")
+except Exception as e:
+self.logger.error(f"Failed to cache API response for key '{key}': {e}", exc_info=True)
+
+def _get_cached_response(self, key: str) -> Optional[Dict[str, Any]]:
+"""Retrieve cached API response if available and fresh."""
+try:
+if key in self.response_cache:
+entry = self.response_cache[key]
+cache_time = datetime.fromisoformat(entry['timestamp'])
+if (datetime.now() - cache_time).total_seconds() < self.cache_expiry:
+self.logger.debug(f"Using in-memory cached response for key '{key}'.")
+return entry['response']
+else:
+self.logger.debug(f"In-memory cache for key '{key}' expired.")
+del self.response_cache[key]
+
+cache_file = self.cache_dir / "responses" / f"{key}.json"
+if cache_file.exists():
+with cache_file.open('r') as f:
+entry = json.load(f)
+cache_time = datetime.fromisoformat(entry['timestamp'])
+if (datetime.now() - cache_time).total_seconds() < self.cache_expiry:
+self.response_cache[key] = entry # Load into memory cache as well
+self.logger.debug(f"Using disk-cached response for key '{key}'.")
+return entry['response']
+else:
+self.logger.debug(f"Disk cache for key '{key}' expired. Removing file: {cache_file}")
+cache_file.unlink(missing_ok=True) # Clean up expired file
+except json.JSONDecodeError:
+self.logger.warning(f"Corrupted cache file for key '{key}': {cache_file}. Deleting.")
+cache_file.unlink(missing_ok=True)
+except Exception as e:
+self.logger.warning(f"Cache retrieval failed for key '{key}': {e}", exc_info=True)
+return None
+
+def _handle_error(self, api_name: str, endpoint: str, error: Exception, status_code: Optional[int] = None, response_text: Optional[str] = None):
+"""Log and store API errors for analysis."""
+error_data = {
+'api': api_name,
+'endpoint': endpoint,
+'timestamp': datetime.now().isoformat(),
+'error_message': str(error),
+'status_code': status_code,
+'response_text': response_text,
+'traceback': str(error.__traceback__) if hasattr(error, '__traceback__') else None
+}
+
+try:
+error_file = self.cache_dir / "errors" / f"error_{int(time.time())}_{hashlib.sha256(str(error_data).encode()).hexdigest()[:8]}.json"
+with error_file.open('w') as f:
+json.dump(error_data, f, indent=2)
+self.logger.error(f"API Error ({api_name}/{endpoint} - Status: {status_code}): {error}. Details logged to {error_file}")
+except Exception as e:
+self.logger.critical(f"Failed to log API error to file: {e}. Original error: {error}", exc_info=True)
+
+self.logger.error(f"API Error ({api_name}/{endpoint} - Status: {status_code}): {error}")
+
+def _apply_authentication(self, api_name: str, headers: Dict[str, str], params: Dict[str, str], auth_token: Optional[str]):
+"""Applies authentication headers/params based on API configuration."""
+config_data = self.api_configs[api_name]
+auth_type = config_data.get('auth_type')
+
+if not auth_token: # Try getting from environment if not provided explicitly
+env_var_name = f"{api_name.upper()}_API_KEY"
+auth_token = os.getenv(env_var_name)
+if not auth_token:
+self.logger.warning(f"No authentication token provided or found in environment for API '{api_name}'.")
+return
+
+if auth_type == 'token' and auth_token:
+headers['Authorization'] = f"Bearer {auth_token}"
+elif auth_type == 'api_key' and auth_token:
+params['key'] = auth_token # Common for Google APIs
+elif auth_type == 'basic' and auth_token:
+headers['Authorization'] = f"Basic {auth_token}"
+elif auth_type == 'hmac' and auth_token and config_data.get('hmac_secret'):
+# Example HMAC: requires secret and message to sign
+timestamp = str(int(time.time()))
+message = f"{timestamp}.{headers.get('Content-Type', '')}.{params.get('param1', '')}".encode('utf-8')
+signature = hmac.new(config_data['hmac_secret'].encode('utf-8'), message, hashlib.sha256).hexdigest()
+headers['X-Hmac-Signature'] = signature
+headers['X-Timestamp'] = timestamp
+
+# Apply custom headers from config if any
+if 'headers' in config_data and isinstance(config_data['headers'], dict):
+headers.update(config_data['headers'])
+
+def _parse_response_content(self, api_name: str, response: requests.Response) -> Any:
+"""Parses the response content based on API configuration, handling JSON, XML, etc."""
+config_data = self.api_configs[api_name]
+response_parser = config_data.get('response_parser', 'json')
+
+if response_parser == 'json':
+try:
+return response.json()
+except json.JSONDecodeError as e:
+self.logger.error(f"Failed to decode JSON response from {api_name}: {e}. Content: {response.text[:200]}...", exc_info=True)
+raise ValueError(f"Invalid JSON response: {e}")
+elif response_parser == 'xml_to_json':
+try:
+import xmltodict
+# Remove namespace for easier parsing if present
+xml_string = re.sub(r' xmlns="[^"]+"', '', response.text, count=1)
+xml_dict = xmltodict.parse(xml_string)
+return xml_dict
+except ImportError:
+self.logger.error("xmltodict not installed. Cannot parse XML to JSON.")
+raise ImportError("xmltodict required for XML parsing.")
+except Exception as e:
+self.logger.error(f"Failed to parse XML response from {api_name}: {e}. Content: {response.text[:200]}...", exc_info=True)
+raise ValueError(f"Invalid XML response: {e}")
+elif response_parser == 'text':
+return response.text
+else:
+self.logger.warning(f"Unknown response parser '{response_parser}' for {api_name}. Returning raw text.")
+return response.text
+
+def make_request(
+self,
+api_name: str,
+endpoint: str,
+method: str = 'GET',
+params: Optional[Dict[str, Any]] = None,
+data: Optional[Dict[str, Any]] = None,
+json_data: Optional[Dict[str, Any]] = None,
+headers: Optional[Dict[str, str]] = None,
+auth_token: Optional[str] = None,
+use_cache: bool = True,
+retries: Optional[int] = None,
+timeout: Optional[Tuple[int, int]] = None, # (connect_timeout, read_timeout)
+stream: bool = False,
+allow_redirects: bool = True
+) -> Optional[Dict[str, Any]]:
+"""Make a robust API request."""
+if api_name not in self.api_configs:
+self.logger.error(f"Unknown API: {api_name}. Please register it first.")
+return None
+
+config_data = self.api_configs[api_name]
+base_url = config_data['base_url']
+full_url = f"{base_url}/{endpoint.lstrip('/')}" # Ensure endpoint is correctly joined
+
+request_headers = {**self.default_headers, **(headers or {})}
+if 'headers' in config_data and isinstance(config_data['headers'], dict):
+request_headers.update(config_data['headers'])
+
+request_params = params.copy() if params else {}
+request_data = data.copy() if data else None
+request_json_data = json_data.copy() if json_data else None
+
+actual_retries = retries if retries is not None else (self.config_manager.api_max_retries if self.config_manager else self.DEFAULT_MAX_RETRIES)
+actual_timeout = timeout if timeout is not None else config.api_request_timeout # Use config property
+
+self._apply_authentication(api_name, request_headers, request_params, auth_token)
+
+cache_key = self._generate_cache_key(api_name, endpoint, method, request_params, request_json_data if request_json_data else request_data)
+if use_cache and method == 'GET':
+cached_response = self._get_cached_response(cache_key)
+if cached_response is not None:
+self.logger.debug(f"Using cached response for {api_name}/{endpoint}")
+return cached_response
+
+last_exception = None
+for attempt in range(actual_retries + 1):
+self._check_rate_limit(api_name, enforce_wait=True) # Always enforce wait before attempt
+
+try:
+self.logger.debug(f"Making API request to {full_url} (Attempt {attempt + 1}/{actual_retries + 1})")
+
+response = requests.request(
+method=method,
+url=full_url,
+params=request_params,
+json=request_json_data, # Use json for JSON bodies
+data=request_data, # Use data for form-encoded or raw bodies
+headers=request_headers,
+timeout=actual_timeout,
+stream=stream,
+allow_redirects=allow_redirects
+)
+
+if response.status_code == 200:
+parsed_result = self._parse_response_content(api_name, response)
+self._cache_response(cache_key, parsed_result, response.status_code)
+return parsed_result
+elif response.status_code in [401, 403]:
+error_msg = f"Authentication/Authorization failed for {api_name}/{endpoint}."
+self._handle_error(api_name, endpoint, Exception(error_msg), response.status_code, response.text)
+return None # Critical error, do not retry
+elif response.status_code == 429: # Rate limit hit
+retry_after = int(response.headers.get('Retry-After', 10))
+self.logger.warning(f"API '{api_name}' reported rate limited (429). Retrying after {retry_after} seconds.")
+time.sleep(retry_after + random.uniform(0, 2)) # Add jitter
+last_exception = Exception(f"Rate limited by API (429) after {attempt+1} attempts.")
+continue # Retry
+elif 400 <= response.status_code < 500:
+error_msg = f"Client error {response.status_code} for {api_name}/{endpoint}: {response.text[:200]}..."
+self._handle_error(api_name, endpoint, Exception(error_msg), response.status_code, response.text)
+return None # Client errors usually not retryable
+elif 500 <= response.status_code < 600:
+error_msg = f"Server error {response.status_code} for {api_name}/{endpoint}: {response.text[:200]}..."
+self._handle_error(api_name, endpoint, Exception(error_msg), response.status_code, response.text)
+last_exception = Exception(f"Server error {response.status_code} after {attempt+1} attempts.")
+time.sleep(self.DEFAULT_BACKOFF_FACTOR * (2 ** attempt) + random.uniform(0, 1)) # Exponential backoff
+continue # Retry
+else:
+error_msg = f"Unexpected API status {response.status_code} for {api_name}/{endpoint}: {response.text[:200]}..."
+self._handle_error(api_name, endpoint, Exception(error_msg), response.status_code, response.text)
+last_exception = Exception(f"Unexpected status {response.status_code} after {attempt+1} attempts.")
+time.sleep(self.DEFAULT_BACKOFF_FACTOR * (2 ** attempt) + random.uniform(0, 1))
+continue # Retry
+
+except requests.exceptions.Timeout as e:
+self.logger.warning(f"Request to {api_name}/{endpoint} timed out (Attempt {attempt + 1}). Retrying...")
+last_exception = e
+self.logger.debug(f"Timeout traceback: {e}", exc_info=True)
+time.sleep(self.DEFAULT_BACKOFF_FACTOR * (2 ** attempt) + random.uniform(0, 1))
+continue # Retry
+except requests.exceptions.ConnectionError as e:
+self.logger.warning(f"Connection error to {api_name}/{endpoint} (Attempt {attempt + 1}). Retrying...")
+last_exception = e
+self.logger.debug(f"Connection error traceback: {e}", exc_info=True)
+time.sleep(self.DEFAULT_BACKOFF_FACTOR * (2 ** attempt) + random.uniform(0, 1))
+continue # Retry
+except requests.exceptions.RequestException as e:
+last_exception = e
+self._handle_error(api_name, endpoint, e, response_text=response.text if 'response' in locals() else None)
+time.sleep(self.DEFAULT_BACKOFF_FACTOR * (2 ** attempt) + random.uniform(0, 1))
+continue # Retry
+except ValueError as e: # Catch parsing errors
+last_exception = e
+self._handle_error(api_name, endpoint, e, status_code=response.status_code if 'response' in locals() else None, response_text=response.text if 'response' in locals() else None)
+return None # Parsing error is usually not retryable
+
+self.logger.error(f"All {actual_retries + 1} retries failed for {api_name}/{endpoint}. Last error: {str(last_exception)}")
+self._handle_error(api_name, endpoint, last_exception if last_exception else Exception("Unknown failure after retries"))
+return None
+
+def batch_request(
+self,
+api_name: str,
+requests_data: List[Dict[str, Any]],
+auth_token: Optional[str] = None,
+max_parallel: int = 5
+) -> List[Optional[Dict[str, Any]]]:
+"""Make multiple API requests with controlled parallelism using threads."""
+if not requests_data:
+return []
+
+results: List[Optional[Dict[str, Any]]] = [None] * len(requests_data)
+
+def worker(index: int, request_args: Dict[str, Any]):
+try:
+result = self.make_request(api_name=api_name, auth_token=auth_token, **request_args)
+results[index] = result
+except Exception as e:
+self.logger.error(f"Batch request worker for index {index} failed: {e}", exc_info=True)
+results[index] = None
+
+threads: List[threading.Thread] = []
+for i, req_args in enumerate(requests_data):
+thread = threading.Thread(target=worker, args=(i, req_args))
+threads.append(thread)
+thread.start()
+
+if len(threads) >= max_parallel:
+for t in threads:
+t.join() # Wait for current batch to finish
+threads = []
+
+# Wait for any remaining threads
+for t in threads:
+t.join()
+
+return results
+
+def clear_cache(self, max_age_hours: Optional[int] = None) -> int:
+"""Clear cached responses older than specified age."""
+cache_responses_dir = self.cache_dir / "responses"
+removed = 0
+
+self.response_cache.clear() # Clear in-memory cache
+self.logger.info("In-memory API cache cleared.")
+
+if not cache_responses_dir.exists():
+self.logger.warning(f"Cache directory '{cache_responses_dir}' does not exist.")
+return 0
+
+try:
+current_time = time.time()
+# If max_age_hours is None, set cutoff_timestamp to 0 to remove all files
+cutoff_timestamp = current_time - (max_age_hours * 3600) if max_age_hours is not None else 0
+
+for cache_file in cache_responses_dir.glob('*.json'):
+try:
+if cache_file.stat().st_mtime < cutoff_timestamp:
+cache_file.unlink()
+removed += 1
+except OSError as e:
+self.logger.error(f"Failed to remove cache file {cache_file}: {e}")
+self.logger.info(f"Cleared {removed} expired cache entries from disk (max_age_hours: {max_age_hours}).")
+return removed
+except Exception as e:
+self.logger.error(f"Cache cleanup failed: {e}", exc_info=True)
+return 0
+
+def get_api_config(self, api_name: str) -> Dict[str, Any]:
+"""Get configuration for a specific API."""
+return self.api_configs.get(api_name, {})
+
+def register_api(
+self,
+api_name: str,
+base_url: str,
+auth_type: Optional[str] = None,
+rate_limit_rpm: int = DEFAULT_RATE_LIMIT_RPM,
+custom_headers: Optional[Dict[str, str]] = None,
+response_parser: str = 'json', # 'json', 'xml_to_json', 'text'
+hmac_secret: Optional[str] = None # For HMAC auth_type
+) -> bool:
+"""Register a new API configuration or update an existing one."""
+if not api_name or not base_url:
+self.logger.error("API name and base_url are required for registration.")
+return False
+
+clean_base_url = base_url.rstrip('/') # Remove trailing slash if present
+
+new_config = {
+'base_url': clean_base_url,
+'auth_type': auth_type,
+'rate_limit_rpm': rate_limit_rpm,
+'response_parser': response_parser,
+}
+if custom_headers:
+new_config['headers'] = custom_headers
+if auth_type == 'hmac' and hmac_secret:
+new_config['hmac_secret'] = hmac_secret
+
+if api_name in self.api_configs:
+self.api_configs[api_name].update(new_config)
+self.logger.info(f"API '{api_name}' configuration updated.")
+else:
+self.api_configs[api_name] = new_config
+self.logger.info(f"New API '{api_name}' registered.")
+return True
+
+def unregister_api(self, api_name: str) -> bool:
+"""Unregister an API configuration."""
+if api_name in self.api_configs:
+del self.api_configs[api_name]
+self.logger.info(f"API '{api_name}' unregistered.")
+return True
+else:
+self.logger.warning(f"Attempted to unregister unknown API: {api_name}.")
+return False
+
+# --- Agent Orchestrator ---
+class AgentOrchestrator:
+"""
+Central coordination system for managing autonomous agents in the AKS ecosystem.
+Handles agent lifecycle, task distribution, and system-wide coordination.
+"""
+INACTIVE_AGENT_THRESHOLD_MULTIPLIER = 3 # How many heartbeat intervals before an agent is considered inactive
+
+def __init__(self, config_manager: Optional[Any] = None, logger_instance: Optional[logging.Logger] = None):
+self.logger = logger_instance if logger_instance else LOGGER
+
+if config_manager is None:
+self.config = {} # Minimal config if none provided, but critical for proper operation
+self.logger.warning("No config_manager provided to AgentOrchestrator. Using minimal default config.")
+else:
+self.config_manager = config_manager # Store reference to actual config object
+self.config = config_manager.to_dict() # Use dict representation for orchestrator's internal use
+
+self.agents: Dict[str, Dict[str, Any]] = {}
+self.task_queue: List[Dict[str, Any]] = []
+self.agent_lock = threading.RLock() # Reentrant lock for agents
+self.task_lock = threading.Lock() # Simple lock for tasks
+
+# Get intervals from config or use defaults
+self.heartbeat_interval = self.config_manager.agent_heartbeat_interval if self.config_manager else 30
+self.last_cleanup = datetime.now() # For periodic cleanup tasks
+
+self._setup_directories()
+self._load_persistent_state()
+
+self._running = True
+self._monitor_thread = threading.Thread(target=self._monitor_agents, daemon=True)
+self._process_tasks_thread = threading.Thread(target=self._process_tasks, daemon=True)
+
+self._monitor_thread.start()
+self._process_tasks_thread.start()
+
+self.logger.info("Agent Orchestrator initialized and background threads started.")
+
+def _setup_directories(self):
+"""Create required directories for agent management."""
+repo_path = self.config_manager.repo_path if self.config_manager else Path('/content/Autonomous-Knowledge-System')
+
+self.orchestrator_base_dir = repo_path / "orchestrator"
+self.orchestrator_base_dir.mkdir(parents=True, exist_ok=True)
+
+self.state_file = self.orchestrator_base_dir / 'orchestrator_state.json'
+self.task_log_file = self.orchestrator_base_dir / 'task_history.log'
+
+self.logger.info(f"Orchestrator directories set up at: {self.orchestrator_base_dir}")
+
+def _load_persistent_state(self):
+"""Load persistent state from disk if available."""
+try:
+if self.state_file.exists():
+with open(self.state_file, 'r') as f:
+state = json.load(f)
+self.agents = {
+agent_id: {
+**data,
+'last_heartbeat': datetime.fromisoformat(data['last_heartbeat'])
+} for agent_id, data in state.get('agents', {}).items()
+}
+self.task_queue = [
+{
+**task,
+'created': datetime.fromisoformat(task['created']),
+'assigned_at': datetime.fromisoformat(task['assigned_at']) if 'assigned_at' in task and task['assigned_at'] else None,
+'completed_at': datetime.fromisoformat(task['completed_at']) if 'completed_at' in task and task['completed_at'] else None
+} for task in state.get('tasks', [])
+]
+self.logger.info(f"Loaded persistent state for {len(self.agents)} agents and {len(self.task_queue)} queued tasks.")
+else:
+self.logger.info("No persistent orchestrator state found. Starting fresh.")
+except json.JSONDecodeError as e:
+self.logger.error(f"Failed to decode orchestrator state JSON: {e}. State file might be corrupted.")
+except Exception as e:
+self.logger.error(f"Failed to load persistent orchestrator state: {e}", exc_info=True)
+
+def _save_persistent_state(self):
+"""Save current state to disk."""
+try:
+with open(self.state_file, 'w') as f:
+serializable_agents = {
+agent_id: {
+**data,
+'last_heartbeat': data['last_heartbeat'].isoformat()
+} for agent_id, data in self.agents.items()
+}
+serializable_tasks = [
+{
+**task,
+'created': task['created'].isoformat(),
+'assigned_at': task['assigned_at'].isoformat() if task['assigned_at'] else None,
+'completed_at': task['completed_at'].isoformat() if task['completed_at'] else None
+} for task in self.task_queue
+]
+json.dump({
+'agents': serializable_agents,
+'tasks': serializable_tasks,
+'last_updated': datetime.now().isoformat()
+}, f, indent=2)
+self.logger.debug("Orchestrator state saved.")
+except Exception as e:
+self.logger.error(f"Failed to save persistent orchestrator state: {e}", exc_info=True)
+
+def register_agent(self, agent_id: str, agent_type: str, capabilities: List[str]) -> bool:
+"""Register a new agent with the orchestrator."""
+with self.agent_lock:
+if agent_id in self.agents:
+self.logger.warning(f"Agent {agent_id} already registered. Updating heartbeat instead.")
+self.update_agent_heartbeat(agent_id) # Update heartbeat even if already registered
+return True
+
+self.agents[agent_id] = {
+'type': agent_type,
+'capabilities': capabilities,
+'last_heartbeat': datetime.now(),
+'status': 'idle', # 'idle', 'busy', 'inactive'
+'current_task': None,
+'stats': {
+'tasks_completed': 0,
+'errors': 0,
+'uptime_seconds': 0 # Consider adding
+}
+}
+self.logger.info(f"Registered new agent: {agent_id} ({agent_type}) with capabilities: {capabilities}")
+self._save_persistent_state()
+return True
+
+def unregister_agent(self, agent_id: str) -> bool:
+"""Unregister an agent from the orchestrator."""
+with self.agent_lock:
+if agent_id not in self.agents:
+self.logger.warning(f"Agent {agent_id} not found for unregistration.")
+return False
+
+# If agent is busy, try to re-queue its current task
+if self.agents[agent_id]['status'] != 'idle':
+self.logger.warning(f"Agent {agent_id} is busy ({self.agents[agent_id]['status']}). Forcibly unregistering.")
+task_id = self.agents[agent_id]['current_task']
+if task_id:
+self._requeue_or_fail_task(task_id, f"Agent {agent_id} unregistered while busy.")
+
+del self.agents[agent_id]
+self.logger.info(f"Unregistered agent: {agent_id}.")
+self._save_persistent_state()
+return True
+
+def update_agent_heartbeat(self, agent_id: str) -> bool:
+"""Update agent heartbeat timestamp."""
+with self.agent_lock:
+if agent_id not in self.agents:
+self.logger.warning(f"Heartbeat update failed - agent {agent_id} not found. Consider re-registering.")
+return False
+
+self.agents[agent_id]['last_heartbeat'] = datetime.now()
+# If agent was inactive, mark it as idle again
+if self.agents[agent_id]['status'] == 'inactive':
+self.agents[agent_id]['status'] = 'idle'
+self.logger.debug(f"Agent {agent_id} heartbeat updated.")
+return True
+
+def submit_task(self, task_type: str, payload: Dict[str, Any], priority: int = 5) -> str:
+"""Submit a new task to the orchestrator's queue."""
+# Generate a unique task ID
+task_id = hashlib.sha256(
+f"{task_type}{json.dumps(payload)}{datetime.now().isoformat()}{random.random()}".encode()
+).hexdigest()[:16] # Truncate for readability
+
+with self.task_lock:
+task_entry = {
+'id': task_id,
+'type': task_type,
+'payload': payload,
+'priority': min(max(1, priority), 10), # Priority 1-10
+'status': 'queued', # 'queued', 'assigned', 'completed', 'failed'
+'created': datetime.now(),
+'assigned_to': None,
+'assigned_at': None,
+'completed_at': None,
+'retries': 0,
+'max_retries': self.config_manager.api_max_retries if self.config_manager else 3 # Use config property
+}
+self.task_queue.append(task_entry)
+self.logger.info(f"Task {task_id} queued (Type: {task_type}, Priority: {priority}).")
+self._log_task_history(f"Task {task_id} queued.", task_entry)
+self._save_persistent_state()
+return task_id
+
+def get_agent_status(self, agent_id: str) -> Optional[Dict[str, Any]]:
+"""Get current status of an agent."""
+with self.agent_lock:
+agent_data = self.agents.get(agent_id)
+if agent_data:
+# Return a copy with serializable datetime
+return {**agent_data, 'last_heartbeat': agent_data['last_heartbeat'].isoformat()}
+return None
+
+def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+"""Get current status of a task. Checks active queue and then task history log."""
+with self.task_lock:
+# First, check the active task queue
+for task in self.task_queue:
+if task['id'] == task_id:
+# Return a copy with serializable datetime
+return {
+**task,
+'created': task['created'].isoformat(),
+'assigned_at': task['assigned_at'].isoformat() if task['assigned_at'] else None,
+'completed_at': task['completed_at'].isoformat() if task['completed_at'] else None
+}
+
+# If not in active queue, check the history log (for completed/failed tasks)
+try:
+with open(self.task_log_file, 'r') as f:
+# Read from end of file for efficiency
+for line in reversed(f.readlines()):
+if task_id in line: # Quick check for task_id presence
+try:
+# Attempt to parse the full JSON object
+task_data_str = line.strip()
+task_data = json.loads(task_data_str)
+if task_data.get('task_data', {}).get('id') == task_id:
+return task_data.get('task_data')
+except json.JSONDecodeError:
+self.logger.error(f"Corrupted task log entry for task ID {task_id}: {line.strip()}")
+return None
+except IndexError: # Handle cases where json parsing might fail with partial lines
+self.logger.error(f"Malformed task log entry for task ID {task_id}: {line.strip()}")
+return None
+except FileNotFoundError:
+self.logger.debug(f"Task history log file '{self.task_log_file}' not found.")
+except Exception as e:
+self.logger.error(f"Error reading task history log for task {task_id}: {e}", exc_info=True)
+
+return None # Task not found anywhere
+
+def _requeue_or_fail_task(self, task_id: str, reason: str = "Agent became unavailable.") -> None:
+"""Handles tasks when an assigned agent becomes unavailable."""
+with self.task_lock:
+for task in self.task_queue:
+if task['id'] == task_id:
+task['retries'] += 1
+if task['retries'] <= task['max_retries']:
+task['status'] = 'queued'
+task['assigned_to'] = None
+task['assigned_at'] = None
+self.logger.warning(f"Task {task_id} re-queued (retry {task['retries']}/{task['max_retries']}) due to '{reason}'.")
+self._log_task_history(f"Task {task_id} re-queued.", task)
+else:
+task['status'] = 'failed'
+task['error_reason'] = f"Max retries exceeded: {reason}"
+task['completed_at'] = datetime.now()
+self.logger.error(f"Task {task_id} failed after {task['max_retries']} retries: '{reason}'.")
+self._log_task_history(f"Task {task_id} failed.", task)
+self.task_queue.remove(task) # Remove from active queue once failed
+self._save_persistent_state()
+return
+self.logger.debug(f"Task {task_id} not found in queue for re-queue/fail operation.")
+
+def _monitor_agents(self):
+"""Background thread to monitor agent health and status."""
+while self._running:
+try:
+now = datetime.now()
+inactive_agents = []
+tasks_to_requeue_or_fail = []
+
+with self.agent_lock:
+for agent_id, agent_data in self.agents.items():
+last_active = agent_data['last_heartbeat']
+inactive_for = (now - last_active).total_seconds()
+
+# Check for task timeouts for busy agents
+if agent_data['status'] == 'busy' and agent_data['current_task']:
+task_assigned_at_iso = agent_data.get('current_task_assigned_at')
+task_assigned_at = datetime.fromisoformat(task_assigned_at_iso) if task_assigned_at_iso else last_active # Fallback
+task_timeout = self.config_manager.task_timeout_seconds if self.config_manager else 300 # Default 5 minutes
+if (now - task_assigned_at).total_seconds() > task_timeout:
+self.logger.warning(f"Agent {agent_id} (busy with task {agent_data['current_task']}) timed out after {task_timeout}s.")
+tasks_to_requeue_or_fail.append(agent_data['current_task'])
+# Reset agent status to idle immediately to allow new assignments
+agent_data['status'] = 'idle'
+agent_data['current_task'] = None
+agent_data['current_task_assigned_at'] = None
+
+
+if inactive_for > self.heartbeat_interval * self.INACTIVE_AGENT_THRESHOLD_MULTIPLIER:
+self.logger.warning(f"Agent {agent_id} inactive for {inactive_for:.1f}s (threshold: {self.heartbeat_interval * self.INACTIVE_AGENT_THRESHOLD_MULTIPLIER:.1f}s). Marking for unregistration.")
+inactive_agents.append(agent_id)
+
+# Process tasks that timed out
+for task_id in tasks_to_requeue_or_fail:
+self._requeue_or_fail_task(task_id, f"Assigned agent timed out.")
+
+# Unregister truly inactive agents
+for agent_id in inactive_agents:
+self.unregister_agent(agent_id) # This will also re-queue/fail its task if any
+
+# Periodic cleanup for completed/failed tasks (from the in-memory queue)
+if (now - self.last_cleanup) > timedelta(hours=1):
+self._cleanup_completed_tasks()
+self.last_cleanup = now
+
+except Exception as e:
+self.logger.error(f"Agent monitoring thread error: {e}", exc_info=True)
+
+time.sleep(self.heartbeat_interval) # Check periodically
+
+def _process_tasks(self):
+"""Background thread to process and assign tasks."""
+while self._running:
+try:
+# Sort tasks by priority (descending) and then creation time (ascending)
+with self.task_lock:
+self.task_queue.sort(key=lambda x: (-x['priority'], x['created']))
+
+task_to_assign: Optional[Dict[str, Any]] = None
+with self.task_lock: # Re-acquire lock to safely iterate and potentially modify
+for task in self.task_queue:
+if task['status'] == 'queued':
+task_to_assign = task
+break
+
+if task_to_assign is None:
+time.sleep(1) # No tasks, wait a bit
+continue
+
+assigned = False
+with self.agent_lock:
+available_agents = [
+(agent_id, agent_data)
+for agent_id, agent_data in self.agents.items()
+if agent_data['status'] == 'idle' and task_to_assign['type'] in agent_data['capabilities']
+]
+
+if available_agents:
+# For simplicity, assign to the first available agent.
+# More complex logic could involve load balancing, specific agent skills, etc.
+agent_id, agent_data = available_agents[0]
+
+with self.task_lock: # Re-acquire task lock as we are modifying the task
+if task_to_assign['status'] == 'queued': # Double check status, as another thread might have grabbed it
+task_to_assign['status'] = 'assigned'
+task_to_assign['assigned_to'] = agent_id
+task_to_assign['assigned_at'] = datetime.now()
+
+agent_data['status'] = 'busy'
+agent_data['current_task'] = task_to_assign['id']
+agent_data['current_task_assigned_at'] = task_to_assign['assigned_at'].isoformat() # Store for timeout checks
+
+self.logger.info(f"Task {task_to_assign['id']} assigned to {agent_id}.")
+self._log_task_history(f"Task {task_to_assign['id']} assigned to {agent_id}.", task_to_assign)
+self._save_persistent_state()
+assigned = True
+else:
+self.logger.debug(f"Task {task_to_assign['id']} was no longer queued, skipping assignment.")
+
+if not assigned:
+time.sleep(1) # No suitable agent found, wait
+except Exception as e:
+self.logger.error(f"Task processing thread error: {e}", exc_info=True)
+time.sleep(1) # Wait to prevent tight loop on errors
+
+def complete_task(self, agent_id: str, task_id: str, result: Dict[str, Any], success: bool = True) -> bool:
+"""Mark a task as completed by an agent."""
+with self.agent_lock:
+if agent_id not in self.agents:
+self.logger.error(f"Agent {agent_id} not found for task completion of task {task_id}.")
+return False
+
+agent_data = self.agents[agent_id]
+# Verify the agent was actually assigned this task
+if agent_data['current_task'] != task_id:
+self.logger.error(f"Agent {agent_id} attempting to complete task {task_id}, but current_task is {agent_data['current_task']}.")
+return False
+
+# Reset agent status
+agent_data['status'] = 'idle'
+agent_data['current_task'] = None
+agent_data['current_task_assigned_at'] = None
+agent_data['stats']['tasks_completed'] += 1
+if not success:
+agent_data['stats']['errors'] += 1
+
+self.logger.debug(f"Agent {agent_id} finished task {task_id}.")
+
+with self.task_lock:
+task_found = False
+for i, task in enumerate(self.task_queue):
+if task['id'] == task_id:
+task['status'] = 'completed' if success else 'failed'
+task['completed_at'] = datetime.now()
+task['result'] = result # Store the result in the task entry
+
+self._log_task_history(f"Task {task_id} completed by {agent_id} (Success: {success}).", task)
+
+del self.task_queue[i] # Remove from active queue
+task_found = True
+break
+
+if not task_found:
+self.logger.error(f"Task {task_id} not found in queue for completion by agent {agent_id}.")
+return False
+
+self._save_persistent_state()
+return True
+
+def _log_task_history(self, message: str, task_data: Dict[str, Any]):
+"""Log task activity to a persistent history file."""
+try:
+with open(self.task_log_file, 'a') as f:
+entry = {
+'timestamp': datetime.now().isoformat(),
+'message': message,
+'task_data': {
+**task_data,
+'created': task_data['created'].isoformat(),
+'assigned_at': task_data['assigned_at'].isoformat() if task_data['assigned_at'] else None,
+'completed_at': task_data['completed_at'].isoformat() if task_data['completed_at'] else None
+}
+}
+f.write(f"{json.dumps(entry)}\n")
+except Exception as e:
+self.logger.error(f"Failed to log task history to {self.task_log_file}: {e}", exc_info=True)
+
+def _cleanup_completed_tasks(self):
+"""Clean up old completed/failed tasks from the in-memory queue."""
+# Tasks are removed from the active queue upon completion, so this is mostly for logging/monitoring purposes
+# or if we decided to keep a short list of 'recent completed' tasks.
+self.logger.debug(f"Task queue cleanup - current size: {len(self.task_queue)}. (Tasks are removed on completion).")
+# Example of pruning old entries from an *in-memory* list of *all* tasks if we were storing them
+# if self.task_history: # If we had a separate in-memory history
+# cutoff = datetime.now() - timedelta(days=7)
+# self.task_history = [t for t in self.task_history if t['created'] > cutoff]
+# self.logger.info(f"Cleaned up old tasks from in-memory history. New size: {len(self.task_history)}")
+
+def shutdown(self):
+"""Gracefully shutdown the orchestrator and its background threads."""
+self.logger.info("Agent Orchestrator shutting down...")
+self._running = False
+self._monitor_thread.join(timeout=self.heartbeat_interval * 2) # Give it some time to finish
+self._process_tasks_thread.join(timeout=2) # Give it some time to finish
+self._save_persistent_state() # Save final state
+self.logger.info("Agent Orchestrator shutdown complete.")
+
+def get_system_status(self) -> Dict[str, Any]:
+"""Get overall system status summary."""
+with self.agent_lock:
+agent_counts = {
+'total': len(self.agents),
+'idle': sum(1 for a in self.agents.values() if a['status'] == 'idle'),
+'busy': sum(1 for a in self.agents.values() if a['status'] == 'busy'),
+'inactive': sum(1 for a_id, a_data in self.agents.items() if (datetime.now() - a_data['last_heartbeat']).total_seconds() > self.heartbeat_interval * self.INACTIVE_AGENT_THRESHOLD_MULTIPLIER)
+}
+
+capability_counts = Counter()
+for agent in self.agents.values():
+for cap in agent['capabilities']:
+capability_counts[cap] += 1
+
+with self.task_lock:
+task_counts = {
+'queued': len([t for t in self.task_queue if t['status'] == 'queued']),
+'assigned': len([t for t in self.task_queue if t['status'] == 'assigned']),
+'retrying': len([t for t in self.task_queue if t['status'] == 'queued' and t['retries'] > 0]),
+'total_active': len(self.task_queue)
+}
+
+return {
+'agents': agent_counts,
+'capabilities': dict(capability_counts),
+'tasks': task_counts,
+'last_updated': datetime.now().isoformat(),
+'orchestrator_uptime_seconds': (datetime.now() - self.last_cleanup).total_seconds() # Simple uptime since last cleanup/start
+}
+
+# --- Stub Classes for Modular Components (Now with more detailed stubs) ---
+# These are minimal implementations to allow the main system to instantiate and run.
+
+class KnowledgeProcessor:
+def __init__(self, knowledge_base_dir: Path, vector_db: VectorDB, logger_instance: Optional[logging.Logger] = None):
+self.knowledge_base_dir = knowledge_base_dir
+self.vector_db = vector_db
+self.logger = logger_instance if logger_instance else LOGGER
+self.logger.info("KnowledgeProcessor initialized (STUB).")
+
+def process_document(self, file_path: Path) -> bool:
+self.logger.info(f"STUB: Processing document {file_path.name}.")
+# In a real implementation: Parse document, chunk, embed, add to vector_db
+if self.vector_db.is_initialized():
+content = file_path.read_text(encoding='utf-8', errors='ignore') # Read content
+self.vector_db.add_document(content=content, metadata={'source': str(file_path)}) # Add to vector DB
+return True # Simulate success
+
+def analyze_knowledge_base(self, analysis_claim: str) -> Optional[str]:
+self.logger.info(f"STUB: Analyzing knowledge base for claim: '{analysis_claim}'")
+# In a real implementation: Query vector_db, synthesize with LLM
+if self.vector_db.is_initialized():
+relevant_docs = self.vector_db.query(analysis_claim, top_k=5)
+context = "\n".join([doc.page_content for doc in relevant_docs])
+# Simulate LLM interaction
+return f"STUB: Analysis result for '{analysis_claim}' based on {len(relevant_docs)} documents."
+return f"STUB: Analysis result for '{analysis_claim}' (VectorDB not initialized)."
+
+
+class ResilienceManager:
+def __init__(self, repo_path: Path, snapshot_dir: Path, max_snapshots: int, logger_instance: Optional[logging.Logger] = None):
+self.repo_path = repo_path
+self.snapshot_dir = snapshot_dir
+self.max_snapshots = max_snapshots
+self.logger = logger_instance if logger_instance else LOGGER
+self.logger.info("ResilienceManager initialized (STUB).")
+
+def create_snapshot(self) -> None:
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+snapshot_name = f"aks_snapshot_{timestamp}"
+snapshot_path = self.snapshot_dir / snapshot_name
+try:
+# Create a zip archive of the repository
+shutil.make_archive(str(snapshot_path), 'zip', self.repo_path)
+self.logger.info(f"STUB: Filesystem snapshot created at {snapshot_path}.zip")
+# Prune old snapshots
+self.archive_old_snapshots()
+except Exception as e:
+self.logger.error(f"STUB: Failed to create snapshot: {e}", exc_info=True)
+
+def restore_latest_snapshot(self) -> bool:
+try:
+# Find the latest snapshot
+snapshots = sorted(self.snapshot_dir.glob('aks_snapshot_*.zip'), key=os.path.getmtime, reverse=True)
+if not snapshots:
+self.logger.warning("STUB: No snapshots found to restore.")
+return False
+latest_snapshot = snapshots[0]
+
+self.logger.info(f"STUB: Restoring from latest snapshot: {latest_snapshot}")
+# Clear current repo before restoring (excluding .git to maintain repo history)
+for item in self.repo_path.iterdir():
+if item.name != ".git": # Don't delete .git directory
+if item.is_dir():
+shutil.rmtree(item)
+else:
+item.unlink()
+
+with zipfile.ZipFile(latest_snapshot, 'r') as zip_ref:
+zip_ref.extractall(self.repo_path)
+self.logger.info("STUB: Filesystem restored to latest snapshot.")
+return True
+except Exception as e:
+self.logger.error(f"STUB: Failed to restore snapshot: {e}", exc_info=True)
+return False
+
+def archive_old_snapshots(self) -> None:
+try:
+snapshots = sorted(self.snapshot_dir.glob('aks_snapshot_*.zip'), key=os.path.getmtime)
+if len(snapshots) > self.max_snapshots:
+for old_snapshot in snapshots[:len(snapshots) - self.max_snapshots]:
+old_snapshot.unlink()
+self.logger.info(f"STUB: Removed old snapshot: {old_snapshot}")
+self.logger.info("STUB: Old snapshots archived.")
+except Exception as e:
+self.logger.error(f"STUB: Archiving old snapshots failed: {e}", exc_info=True)
+
+
+class NaturalLanguageInterface:
+def __init__(self, ai_manager: AIProviderManager, logger_instance: Optional[logging.Logger] = None):
+self.ai_manager = ai_manager
+self.logger = logger_instance if logger_instance else LOGGER
+self.logger.info("NaturalLanguageInterface initialized (STUB).")
+
+def process_query(self, query: str) -> str:
+self.logger.info(f"STUB: Processing NLI query: '{query}'")
+# In a real implementation: use AI to understand query, retrieve relevant info, and generate a nuanced response
+response = self.ai_manager.generate_text(query, "You are a helpful natural language interface for AKS.", max_tokens=200)
+return response if response else f"STUB: Default response to '{query}'"
+
+class CollaborativeProcessor:
+def __init__(self, knowledge_processor: KnowledgeProcessor, user_feedback_dir: Path, temp_dir: Path, ai_manager: AIProviderManager, logger_instance: Optional[logging.Logger] = None):
+self.knowledge_processor = knowledge_processor
+self.user_feedback_dir = user_feedback_dir
+self.temp_dir = temp_dir
+self.ai_manager = ai_manager
+self.logger = logger_instance if logger_instance else LOGGER
+self.logger.info("CollaborativeProcessor initialized (STUB).")
+
+def process_feedback(self) -> bool:
+self.logger.info("STUB: Processing user feedback.")
+# In a real implementation: read feedback files, summarize, integrate into knowledge, generate tasks
+feedback_files = list(self.user_feedback_dir.glob("*.txt"))
+if feedback_files:
+self.logger.info(f"STUB: Found {len(feedback_files)} feedback files. Processing one.")
+content = feedback_files[0].read_text()
+summary = self.ai_manager.generate_text(content, "Summarize user feedback", max_tokens=150)
+self.logger.info(f"STUB: Summarized feedback: {summary}")
+# Logic to create tasks based on feedback (e.g., improve a module, add knowledge)
+return True
+return False
+
+def simulate_debate(self, topic: str) -> str:
+self.logger.info(f"STUB: Simulating debate on topic: '{topic}'")
+# In a real implementation: use multiple AI models for different personas,
+# leverage knowledge base for arguments, orchestrate debate turns.
+debate_prompt = f"Simulate a debate on the topic: '{topic}'. Present arguments for and against."
+debate_result = self.ai_manager.generate_text(debate_prompt, "You are a debate moderator.", max_tokens=500)
+return debate_result if debate_result else f"STUB: Debate simulation result for '{topic}'"
+
+class GitManager:
+# Full implementation as provided previously
+def __init__(self, repo_path: Path, github_token: Optional[str], repo_owner: str, repo_name: str, repo_url: str, logger_instance: Optional[logging.Logger] = None):
+import git # Import GitPython here to avoid ImportError if not installed globally
+self.repo_path = repo_path
+self.github_token = github_token
+self.repo_owner = repo_owner
+self.repo_name = repo_name
+self.repo_url = repo_url
+self.logger = logger_instance if logger_instance else LOGGER
+self.repo: Optional[git.Repo] = None
+try:
+# Check if repo_path exists and is a git repository
+if self.repo_path.exists() and (self.repo_path / ".git").is_dir():
+self.repo = git.Repo(self.repo_path)
+self.logger.info("GitManager initialized with existing repository.")
+else:
+self.logger.warning("GitManager initialized, but repository not found or not a git repo yet.")
+except Exception as e:
+self.logger.error(f"Error initializing GitManager with repo at {repo_path}: {e}")
+
+def is_repo_initialized(self) -> bool:
+return self.repo is not None
+
+def initialize_repo(self) -> None:
+import git
+try:
+if not self.repo_path.exists():
+self.repo_path.mkdir(parents=True)
+self.repo = git.Repo.init(self.repo_path)
+self.repo.create_remote('origin', self.repo_url)
+self.logger.info(f"Git repository initialized at {self.repo_path}.")
+except Exception as e:
+self.logger.error(f"Failed to initialize Git repository at {self.repo_path}: {e}", exc_info=True)
+
+def commit_and_push(self, message: str) -> bool:
+if not self.repo:
+self.logger.warning("GitManager not initialized, skipping commit and push.")
+return False
+try:
+# Chec…
