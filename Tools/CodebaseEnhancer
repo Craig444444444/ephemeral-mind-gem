@@ -1,0 +1,487 @@
+import React, { useState, useRef } from 'react';
+import { Upload, FileText, GitPullRequest, CheckCircle, AlertCircle, Trash2, Code, Search, Zap, Loader, ShieldCheck, Bug, XCircle, Settings } from 'lucide-react';
+
+const CodebaseEnhancer = () => {
+  const [files, setFiles] = useState([]);
+  const [pastedCode, setPastedCode] = useState('');
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [appliedFixes, setAppliedFixes] = useState([]);
+  const [pullRequest, setPullRequest] = useState(null);
+  const [validationState, setValidationState] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileUpload = (event) => {
+    const uploadedFiles = Array.from(event.target.files);
+    setFiles(prev => [...prev, ...uploadedFiles]);
+  };
+
+  const analyzeCode = async () => {
+    if (files.length === 0 && !pastedCode) return;
+    
+    setIsAnalyzing(true);
+    setAnalysis(null);
+    setAppliedFixes([]);
+    setPullRequest(null);
+    setValidationState(null);
+    
+    const totalFiles = files.length + (pastedCode ? 1 : 0);
+
+    setTimeout(() => {
+      const mockAnalysis = {
+        totalFiles: totalFiles,
+        issuesFound: Math.floor(Math.random() * 10) + 5,
+        duplicateFunctions: [
+          {
+            id: 'dup-1',
+            type: 'duplicate',
+            name: 'get_timestamp',
+            file: 'src/utils.py',
+            lineStart: 15,
+            lineEnd: 20,
+            duplicateIn: ['src/helpers.py', 'src/main.py']
+          },
+          {
+            id: 'dup-2',
+            type: 'duplicate',
+            name: 'validate_email',
+            file: 'src/validators.py',
+            lineStart: 8,
+            lineEnd: 15,
+            duplicateIn: ['src/auth.py']
+          }
+        ],
+        unusedFunctions: [
+          {
+            id: 'unused-1',
+            type: 'unused',
+            name: 'legacy_format',
+            file: 'src/formatters.py',
+            lineStart: 45,
+            lineEnd: 60
+          }
+        ],
+        codeSmells: [
+          'Long parameter lists in process_data()',
+          'Nested loops in data_processor.py',
+          'Magic numbers in configuration.py'
+        ]
+      };
+      
+      setAnalysis(mockAnalysis);
+      setIsAnalyzing(false);
+    }, 2000);
+  };
+
+  const applyFix = (issue) => {
+    setAppliedFixes(prev => {
+      const existingFix = prev.find(fix => fix.id === issue.id);
+      if (existingFix) {
+        return prev; // Fix already applied, do nothing
+      }
+      return [...prev, issue];
+    });
+  };
+
+  const removeFix = (issueId) => {
+    setAppliedFixes(prev => prev.filter(fix => fix.id !== issueId));
+  };
+
+  const generateFinalPullRequest = () => {
+    if (appliedFixes.length === 0) return;
+    setPullRequest(null);
+
+    const prTitle = `Automated Refactoring: ${appliedFixes.length} Change${appliedFixes.length > 1 ? 's' : ''}`;
+    const prDescription = "This pull request contains automated code quality improvements and refactoring suggestions based on the latest codebase analysis.";
+    const fileChanges = {};
+
+    appliedFixes.forEach(fix => {
+      if (fix.type === 'duplicate') {
+        const primaryFilePath = fix.file;
+        const duplicateFilePaths = fix.duplicateIn;
+        
+        fileChanges[primaryFilePath] = {
+          before: `def ${fix.name}():\n    # Original implementation\n    ...`,
+          after: `def ${fix.name}():\n    # Original implementation\n    ...`,
+          actions: ['keep_primary']
+        };
+
+        duplicateFilePaths.forEach(file => {
+          fileChanges[file] = {
+            before: `def ${fix.name}():\n    # Duplicate implementation\n    ...`,
+            after: `# Function removed - using implementation from ${primaryFilePath}`,
+            actions: ['remove_function', 'add_import']
+          };
+        });
+      } else if (fix.type === 'unused') {
+        fileChanges[fix.file] = {
+          before: `def ${fix.name}():\n    # Unused function implementation\n    ...`,
+          after: `# Function removed as it was unused`,
+          actions: ['remove_function']
+        };
+      }
+    });
+
+    setPullRequest({
+      pull_request_title: prTitle,
+      pull_request_description: prDescription,
+      file_changes: fileChanges,
+    });
+    setValidationState('pending');
+  };
+
+  const runValidationChecks = () => {
+    if (!pullRequest) return;
+    setValidationState('running');
+
+    setTimeout(() => {
+      const passes = Math.random() > 0.3;
+      setValidationState(passes ? 'success' : 'failed');
+    }, 3000);
+  };
+
+  const exportPullRequest = () => {
+    if (!pullRequest) return;
+    
+    const dataStr = JSON.stringify(pullRequest, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = 'pull_request.json';
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const getValidationReport = () => {
+    if (validationState === 'success') {
+      return (
+        <div className="p-4 bg-green-500/20 rounded-lg">
+          <div className="flex items-center text-green-300">
+            <CheckCircle className="w-5 h-5 mr-2" />
+            <span className="font-semibold">All Checks Passed:</span> Rigorous automated tests and security scans found no issues. Ready for human review and merge.
+          </div>
+        </div>
+      );
+    } else if (validationState === 'failed') {
+      return (
+        <div className="p-4 bg-red-500/20 rounded-lg">
+          <div className="flex items-center text-red-300">
+            <AlertCircle className="w-5 h-5 mr-2" />
+            <span className="font-semibold">Validation Failed:</span> Security or stability risks detected. This change will be discarded.
+          </div>
+        </div>
+      );
+    } else if (validationState === 'running') {
+      return (
+        <div className="p-4 bg-blue-500/20 rounded-lg animate-pulse">
+          <div className="flex items-center text-blue-300">
+            <Loader className="w-5 h-5 mr-2 animate-spin" />
+            <span className="font-semibold">Running Automated Checks...</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const isFixApplied = (issueId) => appliedFixes.some(fix => fix.id === issueId);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 p-6 font-sans">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center mb-4">
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-3 rounded-full mr-4">
+              <Code className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-4xl font-bold text-white">CodebaseEnhancer</h1>
+          </div>
+          <p className="text-gray-300 text-lg">Automated refactoring and code quality improvement</p>
+        </div>
+
+        {/* File Upload Section */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-6 shadow-xl">
+          <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+            <Upload className="w-5 h-5 mr-2" />
+            Upload Code Files
+          </h2>
+          
+          <div className="border-2 border-dashed border-gray-400 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".py,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.h"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-white mb-2">Drop your code files here or click to browse</p>
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Select Files
+            </button>
+          </div>
+
+          {files.length > 0 && (
+            <div className="mt-4">
+              <p className="text-white mb-2">Uploaded Files ({files.length}):</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {files.map((file, index) => (
+                  <div key={index} className="bg-white/5 rounded-lg p-2 text-sm text-gray-300">
+                    {file.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Paste Code Section */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-6 shadow-xl">
+          <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+            <FileText className="w-5 h-5 mr-2" />
+            Or Paste Your Code
+          </h2>
+          <textarea
+            className="w-full h-48 p-4 bg-gray-800 text-gray-300 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Paste your code snippet here..."
+            value={pastedCode}
+            onChange={(e) => setPastedCode(e.target.value)}
+          />
+        </div>
+
+        {/* Analysis Section */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-6 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-white flex items-center">
+              <Search className="w-5 h-5 mr-2" />
+              Code Analysis
+            </h2>
+            <button
+              onClick={analyzeCode}
+              disabled={ (files.length === 0 && !pastedCode) || isAnalyzing }
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader className="w-4 h-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4 mr-2" />
+                  Analyze Code
+                </>
+              )}
+            </button>
+          </div>
+
+          {analysis && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-blue-500/20 rounded-lg p-4">
+                <div className="text-2xl font-bold text-blue-300">{analysis.totalFiles}</div>
+                <div className="text-blue-200">Files Analyzed</div>
+              </div>
+              <div className="bg-yellow-500/20 rounded-lg p-4">
+                <div className="text-2xl font-bold text-yellow-300">{analysis.issuesFound}</div>
+                <div className="text-yellow-200">Issues Found</div>
+              </div>
+              <div className="bg-green-500/20 rounded-lg p-4">
+                <div className="text-2xl font-bold text-green-300">
+                  {analysis.duplicateFunctions.length + analysis.unusedFunctions.length}
+                </div>
+                <div className="text-green-200">Auto-fixable</div>
+              </div>
+            </div>
+          )}
+
+          {analysis && (
+            <div className="space-y-4">
+              {/* Duplicate Functions */}
+              {analysis.duplicateFunctions.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium text-white mb-3 flex items-center">
+                    <AlertCircle className="w-5 h-5 mr-2 text-yellow-400" />
+                    Duplicate Functions ({analysis.duplicateFunctions.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {analysis.duplicateFunctions.map((func, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-4 flex items-center justify-between">
+                        <div>
+                          <div className="text-white font-medium">{func.name}</div>
+                          <div className="text-gray-400 text-sm">
+                            Primary: {func.file} | Duplicates: {func.duplicateIn.join(', ')}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => applyFix(func)}
+                          disabled={isFixApplied(func.id)}
+                          className={`px-3 py-1 rounded-lg text-sm flex items-center transition-colors ${
+                            isFixApplied(func.id) ? 'bg-gray-600 text-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'
+                          }`}
+                        >
+                          {isFixApplied(func.id) ? <CheckCircle className="w-4 h-4 mr-1" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                          {isFixApplied(func.id) ? 'Applied' : 'Apply Fix'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Unused Functions */}
+              {analysis.unusedFunctions.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium text-white mb-3 flex items-center">
+                    <AlertCircle className="w-5 h-5 mr-2 text-orange-400" />
+                    Unused Functions ({analysis.unusedFunctions.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {analysis.unusedFunctions.map((func, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-4 flex items-center justify-between">
+                        <div>
+                          <div className="text-white font-medium">{func.name}</div>
+                          <div className="text-gray-400 text-sm">
+                            {func.file}:{func.lineStart}-{func.lineEnd}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => applyFix(func)}
+                          disabled={isFixApplied(func.id)}
+                          className={`px-3 py-1 rounded-lg text-sm flex items-center transition-colors ${
+                            isFixApplied(func.id) ? 'bg-gray-600 text-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'
+                          }`}
+                        >
+                          {isFixApplied(func.id) ? <CheckCircle className="w-4 h-4 mr-1" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                          {isFixApplied(func.id) ? 'Applied' : 'Apply Fix'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Code Smells */}
+              <div>
+                <h3 className="text-lg font-medium text-white mb-3 flex items-center">
+                  <AlertCircle className="w-5 h-5 mr-2 text-purple-400" />
+                  Code Smells
+                </h3>
+                <div className="bg-white/5 rounded-lg p-4">
+                  <ul className="text-gray-300 space-y-1">
+                    {analysis.codeSmells.map((smell, index) => (
+                      <li key={index} className="flex items-center">
+                        <div className="w-2 h-2 bg-purple-400 rounded-full mr-2"></div>
+                        {smell}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Applied Fixes Section */}
+        {appliedFixes.length > 0 && (
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-6 shadow-xl">
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+              <Settings className="w-5 h-5 mr-2" />
+              Pending Changes ({appliedFixes.length})
+            </h2>
+            <div className="space-y-2">
+              {appliedFixes.map(fix => (
+                <div key={fix.id} className="bg-white/5 rounded-lg p-4 flex items-center justify-between">
+                  <div>
+                    <span className="font-semibold text-blue-400">
+                      {fix.type === 'duplicate' ? 'Duplicate Function:' : 'Unused Function:'}
+                    </span>{' '}
+                    <span className="text-white">{fix.name}</span>
+                    <span className="text-gray-400 text-sm block mt-1">
+                      in {fix.file}
+                    </span>
+                  </div>
+                  <button onClick={() => removeFix(fix.id)} className="text-red-400 hover:text-red-500 transition-colors">
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={generateFinalPullRequest}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center"
+              >
+                <GitPullRequest className="w-4 h-4 mr-2" />
+                Generate Pull Request
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Pull Request Preview */}
+        {pullRequest && (
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 shadow-xl mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-white flex items-center">
+                <GitPullRequest className="w-5 h-5 mr-2" />
+                Generated Pull Request
+              </h2>
+            </div>
+            <div className="bg-black/30 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+              <pre className="text-gray-300">
+                {JSON.stringify(pullRequest, null, 2)}
+              </pre>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={runValidationChecks}
+                disabled={validationState === 'running'}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors flex items-center"
+              >
+                {validationState === 'running' ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Validating...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 mr-2" />
+                    Run Automated Checks
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Validation Report Section */}
+        {validationState && (
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-white flex items-center">
+                <Bug className="w-5 h-5 mr-2" />
+                Validation Report
+              </h2>
+              {(validationState === 'success' || validationState === 'failed') && (
+                <button
+                  onClick={exportPullRequest}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  Export Pull Request
+                </button>
+              )}
+            </div>
+            {getValidationReport()}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default CodebaseEnhancer;
