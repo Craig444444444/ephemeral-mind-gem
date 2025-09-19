@@ -1,0 +1,989 @@
+```python
+# =========================================================
+# 🚀 Autonomous Knowledge System - Autonomous System Framework (Integrated & Enhanced)
+# This file consolidates all enhanced components and incorporates
+# further structural and functional improvements discussed.
+# Copy-Paste in Google Colab and Run Once.
+# =========================================================
+
+# --- 0. Initial Setup & Dependencies ---
+# Combined and deduplicated pip install commands
+# Using verbose install for clarity in case of errors
+!pip install --upgrade -q google-generativeai gitpython requests pygithub html2text markdownify duckduckgo-search pyfiglet transformers torch python-dateutil beautifulsoup4 tqdm langchain openai sentence-transformers fake-useragent PyPDF2 python-docx autopep8
+!sudo apt-get update && sudo apt-get install -y git-lfs
+
+import os
+import re
+import json
+import time
+import random
+import zipfile
+import shutil
+import threading
+import subprocess
+import logging
+import sys
+import hashlib
+import ast
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Tuple, Callable
+from getpass import getpass
+from logging.handlers import RotatingFileHandler
+from collections import Counter, deque
+import importlib.util
+from urllib.parse import urlencode, urlparse, parse_qs
+import hmac
+from io import StringIO # For Gradio log capture
+
+# --- Constants ---
+MAX_LOG_SIZE = 10 * 1024 * 1024 # 10MB
+MAX_LOG_BACKUPS = 5
+DEFAULT_CYCLE_INTERVAL = 15 * 60 # 15 minutes in seconds
+MAX_API_RETRIES = 5
+MIN_DISK_SPACE = 1 * 1024 * 1024 * 1024 # 1GB
+
+# Package import name mapping for installation checks
+PACKAGE_MAPPING = {
+"pyfiglet": "pyfiglet",
+"google-generativeai": "google.generativeai",
+"transformers": "transformers",
+"torch": "torch",
+"python-dateutil": "dateutil",
+"requests": "requests",
+"beautifulsoup4": "bs4",
+"tqdm": "tqdm",
+"gitpython": "git",
+"gradio": "gradio",
+"pygithub": "github",
+"html22text": "html2text",
+"markdownify": "markdownify",
+"duckduckgo-search": "duckduckgo_search",
+"langchain": "langchain",
+"openai": "openai",
+"sentence-transformers": "sentence_transformers",
+"fake-useragent": "fake_useragent",
+"PyPDF2": "PyPDF2",
+"python-docx": "docx",
+"autopep8": "autopep8",
+"xmltodict": "xmltodict",
+}
+
+# --- Install required packages ---
+def install_required_packages():
+""" Checks for and installs all required Python packages and git-lfs. Ensures a clean and robust environment for the AKS. """
+required_packages = {
+"pyfiglet": ">=0.8.post1",
+"google-generativeai": ">=0.5.4",
+"transformers": ">=4.40.0",
+"torch": ">=2.2.0",
+"python-dateutil": ">=2.8.2",
+"requests": ">=2.31.0",
+"beautifulsoup4": ">=4.12.0",
+"tqdm": ">=4.66.0",
+"gitpython": ">=3.1.43",
+"gradio": ">=4.0.0",
+"pygithub": ">=2.2.0",
+"html2text": ">=2020.1.16",
+"markdownify": ">=0.11.6",
+"duckduckgo-search": ">=5.1.0",
+"langchain": ">=0.1.0",
+"openai": ">=1.0.0",
+"sentence-transformers": ">=2.7.0",
+"fake-useragent": ">=1.5.1",
+"PyPDF2": ">=3.0.0",
+"python-docx": ">=1.1.0",
+"autopep8": ">=2.0.4",
+"xmltodict": ">=0.13.0",
+}
+
+print("Checking and installing required Python packages...")
+packages_to_install = []
+for package, version in required_packages.items():
+try:
+import_name = PACKAGE_MAPPING.get(package, package.split("==")[0].replace("-", "_"))
+importlib.import_module(import_name)
+print(f"DEBUG: Package '{package}' already installed.")
+except ImportError:
+packages_to_install.append(f"{package}{version}")
+except Exception as e:
+print(f"ERROR: Unexpected error during import check for '{package}': {e}", file=sys.stderr)
+
+if packages_to_install:
+print(f"INFO: Installing {len(packages_to_install)} missing packages...")
+try:
+subprocess.run(
+[sys.executable, "-m", "pip", "install", *packages_to_install],
+check=True,
+capture_output=True,
+text=True
+)
+print(f"INFO: Successfully installed missing packages.")
+except subprocess.CalledProcessError as e:
+print(f"ERROR: Failed to install packages: {e.stderr.strip()}", file=sys.stderr)
+except Exception as e:
+print(f"ERROR: Unexpected error during bulk installation: {e}", file=sys.stderr)
+else:
+print("INFO: All required Python packages are already installed.")
+
+print("Checking and installing git-lfs...")
+try:
+subprocess.run(["git", "lfs"], check=True, capture_output=True, text=True)
+print("DEBUG: git-lfs is already installed.")
+except (subprocess.CalledProcessError, FileNotFoundError):
+print("INFO: git-lfs not found. Attempting to install...")
+try:
+subprocess.run(["sudo", "apt-get", "update"], check=True, capture_output=True, text=True)
+subprocess.run(["sudo", "apt-get", "install", "-y", "git-lfs"], check=True, capture_output=True, text=True)
+subprocess.run(["git", "lfs", "install"], check=True, capture_output=True, text=True)
+print("INFO: Successfully installed git-lfs.")
+except subprocess.CalledProcessError as e:
+print(f"ERROR: Failed to install git-lfs: {e.stderr.strip()}", file=sys.stderr)
+except Exception as e:
+print(f"ERROR: Unexpected error during git-lfs installation: {e}", file=sys.stderr)
+
+install_required_packages()
+
+# --- Conditional Imports (after installation attempt) ---
+try:
+import pyfiglet
+except ImportError:
+pyfiglet = None
+print("WARNING: pyfiglet not available. ASCII art banners will be disabled.")
+
+try:
+import google.generativeai as genai
+except ImportError:
+genai = None
+print("WARNING: Google Generative AI not available. Gemini provider will be disabled.")
+
+try:
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+import torch
+except ImportError:
+AutoModelForCausalLM = None
+AutoTokenizer = None
+set_seed = None
+torch = None
+print("WARNING: Transformers or PyTorch not available. GPT-2 fallback provider will be disabled.")
+
+try:
+from dateutil.parser import parse as date_parse
+except ImportError:
+date_parse = None
+print("WARNING: dateutil not available. Date parsing functionality may be limited.")
+
+try:
+from tqdm import tqdm
+except ImportError:
+tqdm = None
+print("WARNING: tqdm not available. Progress bars will be disabled.")
+
+try:
+import gradio as gr
+except ImportError:
+gr = None
+print("WARNING: Gradio not available. The web UI will be disabled and AKS will run in console-only mode.")
+
+# --- Configuration System ---
+class Config:
+""" Centralized configuration management system for the Autonomous Knowledge System.
+Manages paths, API keys, system parameters, and ensures directory setup.
+"""
+def __init__(self):
+self._config_version: str = "1.5" # Updated version to reflect changes
+
+# Repository Configuration
+self._repo_owner: str = os.getenv("GITHUB_REPO_OWNER") or "Craig444444444"
+self._repo_name: str = os.getenv("GITHUB_REPO_NAME") or "Autonomous-Knowledge-System"
+self._repo_url: str = f"https://github.com/{self._repo_owner}/{self._repo_name}.git"
+self._repo_path: Path = Path(os.getenv("REPO_CLONE_PATH", "/content")) / self._repo_name
+
+# Directory Configuration
+self._monitor_dir: Path = Path(os.getenv("MONITOR_DIR", "/content"))
+self._user_feedback_dir: Path = self._repo_path / "user_feedback"
+self._archive_dir: Path = self._repo_path / "archive"
+self._temp_dir: Path = self._repo_path / "temp"
+self._knowledge_base_dir: Path = self._repo_path / "knowledge_base"
+self._snapshot_dir: Path = self._repo_path / "snapshots"
+self._quarantine_dir: Path = self._repo_path / "quarantine"
+self._user_uploads_dir: Path = self._repo_path / "user_uploads"
+self._vector_db_dir: Path = self._repo_path / "vector_db"
+self._api_cache_dir: Path = self._repo_path / "api_cache" # New: API cache directory
+
+# System configuration
+self._log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+self._github_token: Optional[str] = os.getenv("GITHUB_TOKEN")
+self._gemini_key: Optional[str] = os.getenv("GEMINI_API_KEY")
+self._cycle_interval: int = int(os.getenv("CYCLE_INTERVAL", DEFAULT_CYCLE_INTERVAL))
+self._max_snapshots: int = int(os.getenv("MAX_SNAPSHOTS", 5))
+self._max_branches: int = int(os.getenv("MAX_BRANCHES", 10))
+self._push_interval: int = int(os.getenv("PUSH_INTERVAL", 60))
+self._ai_activity_chance: float = float(os.getenv("AI_ACTIVITY_CHANCE", 0.7))
+self._api_max_retries: int = int(os.getenv("API_MAX_RETRIES", MAX_API_RETRIES))
+self._max_plugins: int = int(os.getenv("MAX_PLUGINS", 10))
+self._max_concurrent_tasks: int = int(os.getenv("MAX_CONCURRENT_TASKS", 5))
+self._api_cache_expiry_seconds: int = int(os.getenv("API_CACHE_EXPIRY_SECONDS", 3600)) # New: API cache expiry
+self._api_request_timeout: Tuple[int, int] = (int(os.getenv("API_CONNECT_TIMEOUT", 10)), int(os.getenv("API_READ_TIMEOUT", 30))) # New: API request timeout
+self._task_timeout_seconds: int = int(os.getenv("TASK_TIMEOUT_SECONDS", 300)) # New: Orchestrator task timeout
+self._agent_heartbeat_interval: int = int(os.getenv("AGENT_HEARTBEAT_INTERVAL", 30)) # New: Orchestrator agent heartbeat
+
+# Preferred models list
+self._preferred_models: List[str] = []
+if self._gemini_key:
+self._preferred_models.append("gemini-1.5-pro-latest")
+if AutoModelForCausalLM is not None and AutoTokenizer is not None and torch is not None:
+self._preferred_models.append("gpt2")
+if not self._preferred_models:
+print("WARNING: No AI models configured or available. Please provide a Gemini API key or ensure transformers/pytorch are installed.")
+
+# Enhanced scraper configuration
+self._scraper_config = {
+'user_agent': os.getenv("SCRAPER_USER_AGENT", 'AKSBot/1.0 (https://github.com/Craig444444444/Autonomous-Knowledge-System)'),
+'max_retries': int(os.getenv("SCRAPER_MAX_RETRIES", 3)),
+'retry_delay': int(os.getenv("SCRAPER_RETRY_DELAY", 5)),
+'extraction_tags': json.loads(os.getenv("SCRAPER_EXTRACTION_TAGS", '["p", "h1", "h2", "h3", "article"]')),
+'max_links': int(os.getenv("SCRAPER_MAX_LINKS", 15)),
+'timeout': int(os.getenv("SCRAPER_TIMEOUT", 30))
+}
+
+# New vector database configuration
+self._vector_db_config = {
+'embedding_model': os.getenv("VECTOR_DB_EMBEDDING_MODEL", 'all-MiniLM-L6-v2'),
+'max_connections': int(os.getenv("VECTOR_DB_MAX_CONNECTIONS", 10)),
+'persist_interval': int(os.getenv("VECTOR_DB_PERSIST_INTERVAL", 300))
+}
+
+self._setup_directories()
+
+def _setup_directories(self):
+"""Create required directories and set appropriate permissions."""
+dirs = [
+self._repo_path,
+self._snapshot_dir,
+self._repo_path / "logs",
+self._user_feedback_dir,
+self._archive_dir,
+self._temp_dir,
+self._knowledge_base_dir,
+self._quarantine_dir,
+self._user_uploads_dir,
+self._vector_db_dir,
+self._api_cache_dir
+]
+for dir_path in dirs:
+try:
+dir_path.mkdir(parents=True, exist_ok=True)
+dir_path.chmod(0o755)
+except OSError as e:
+sys.stderr.write(f"CRITICAL ERROR: Failed to create or set permissions for directory {dir_path}: {e}\n")
+sys.exit(1)
+
+@property
+def config_version(self) -> str:
+return self._config_version
+@property
+def repo_owner(self) -> str:
+return self._repo_owner
+@repo_owner.setter
+def repo_owner(self, value: str):
+if not value: return
+self._repo_owner = value
+self._repo_url = f"https://github.com/{self._repo_owner}/{self._repo_name}.git"
+@property
+def repo_name(self) -> str:
+return self._repo_name
+@repo_name.setter
+def repo_name(self, value: str):
+if not value: return
+self._repo_name = value
+self._repo_url = f"https://github.com/{self._repo_owner}/{self._repo_name}.git"
+self._repo_path = Path(os.getenv("REPO_CLONE_PATH", "/content")) / self._repo_name
+@property
+def repo_url(self) -> str:
+return self._repo_url
+@property
+def repo_path(self) -> Path:
+return self._repo_path
+@property
+def monitor_dir(self) -> Path:
+return self._monitor_dir
+@property
+def user_feedback_dir(self) -> Path:
+return self._user_feedback_dir
+@property
+def archive_dir(self) -> Path:
+return self._archive_dir
+@property
+def temp_dir(self) -> Path:
+return self._temp_dir
+@property
+def knowledge_base_dir(self) -> Path:
+return self._knowledge_base_dir
+@property
+def snapshot_dir(self) -> Path:
+return self._snapshot_dir
+@property
+def quarantine_dir(self) -> Path:
+return self._quarantine_dir
+@property
+def user_uploads_dir(self) -> Path:
+return self._user_uploads_dir
+@property
+def vector_db_dir(self) -> Path:
+return self._vector_db_dir
+@property
+def api_cache_dir(self) -> Path:
+return self._api_cache_dir
+@property
+def log_level(self) -> str:
+return self._log_level
+@property
+def github_token(self) -> Optional[str]:
+return self._github_token
+@github_token.setter
+def github_token(self, value: str):
+self._github_token = value
+@property
+def gemini_key(self) -> Optional[str]:
+return self._gemini_key
+@gemini_key.setter
+def gemini_key(self, value: str):
+self._gemini_key = value
+@property
+def cycle_interval(self) -> int:
+return self._cycle_interval
+@property
+def max_snapshots(self) -> int:
+return self._max_snapshots
+@property
+def max_branches(self) -> int:
+return self._max_branches
+@property
+def push_interval(self) -> int:
+return self._push_interval
+@property
+def ai_activity_chance(self) -> float:
+return self._ai_activity_chance
+@property
+def api_max_retries(self) -> int:
+return self._api_max_retries
+@property
+def max_plugins(self) -> int:
+return self._max_plugins
+@property
+def max_concurrent_tasks(self) -> int:
+return self._max_concurrent_tasks
+@property
+def api_cache_expiry_seconds(self) -> int:
+return self._api_cache_expiry_seconds
+@property
+def api_request_timeout(self) -> Tuple[int, int]:
+return self._api_request_timeout
+@property
+def task_timeout_seconds(self) -> int:
+return self._task_timeout_seconds
+@property
+def agent_heartbeat_interval(self) -> int:
+return self._agent_heartbeat_interval
+@property
+def preferred_models(self) -> List[str]:
+return self._preferred_models
+@property
+def scraper_config(self) -> Dict[str, Any]:
+return self._scraper_config
+@property
+def vector_db_config(self) -> Dict[str, Any]:
+return self._vector_db_config
+
+def validate(self) -> List[str]:
+"""Validate configuration and return errors."""
+errors = []
+if not self._repo_owner:
+errors.append("Missing required configuration: repo_owner")
+if not self._repo_name:
+errors.append("Missing required configuration: repo_name")
+if not self._repo_path.is_absolute():
+errors.append("Configuration error: repo_path must be an absolute path.")
+
+if not os.access(self._repo_path.parent, os.W_OK):
+errors.append(f"Permission error: Cannot write to base directory '{self._repo_path.parent}' for repository cloning.")
+
+if not self._github_token:
+errors.append("GitHub token is required for remote repository operations.")
+
+if not self._preferred_models:
+errors.append("No AI providers are configured or available. Please provide a Gemini API key or ensure transformers/pytorch are installed.")
+elif "gpt2" not in self._preferred_models and not self._gemini_key:
+errors.append("Gemini API key is required unless GPT-2 (transformers/pytorch) is the only configured model.")
+
+for dir_prop in ["user_feedback_dir", "archive_dir", "temp_dir", "knowledge_base_dir", "snapshot_dir", "quarantine_dir", "user_uploads_dir", "vector_db_dir", "api_cache_dir"]:
+dir_path = getattr(self, dir_prop)
+if not dir_path.is_absolute():
+errors.append(f"Configuration error: {dir_prop} must be an absolute path (derived from repo_path).")
+
+if not isinstance(self._cycle_interval, int) or self._cycle_interval <= 0:
+errors.append("cycle_interval must be a positive integer.")
+if not isinstance(self._max_snapshots, int) or self._max_snapshots <= 0:
+errors.append("max_snapshots must be a positive integer.")
+if not isinstance(self._ai_activity_chance, float) or not (0.0 <= self._ai_activity_chance <= 1.0):
+errors.append("ai_activity_chance must be a float between 0.0 and 1.0.")
+
+return errors
+
+def to_dict(self) -> Dict[str, Any]:
+"""Convert configuration to dictionary, redacting sensitive data."""
+return {
+"config_version": self._config_version,
+"repository": {
+"owner": self._repo_owner,
+"name": self._repo_name,
+"url": self._repo_url,
+"path": str(self._repo_path),
+"monitor_dir": str(self._monitor_dir),
+"user_feedback_dir": str(self._user_feedback_dir),
+"archive_dir": str(self._archive_dir),
+"temp_dir": str(self._temp_dir),
+"knowledge_base_dir": str(self._knowledge_base_dir),
+"snapshot_dir": str(self._snapshot_dir),
+"quarantine_dir": str(self._quarantine_dir),
+"user_uploads_dir": str(self._user_uploads_dir),
+"vector_db_dir": str(self._vector_db_dir),
+"api_cache_dir": str(self._api_cache_dir)
+},
+"api": {
+"github_token": "***REDACTED***" if self._github_token else None,
+"gemini_key": "***REDACTED***" if self._gemini_key else None,
+},
+"system": {
+"log_level": self._log_level,
+"max_branches": self._max_branches,
+"max_snapshots": self._max_snapshots,
+"cycle_interval": self._cycle_interval,
+"push_interval": self._push_interval,
+"ai_activity_chance": self._ai_activity_chance,
+"api_max_retries": self._api_max_retries,
+"preferred_models": self._preferred_models,
+"max_plugins": self._max_plugins,
+"max_concurrent_tasks": self._max_concurrent_tasks,
+"api_cache_expiry_seconds": self._api_cache_expiry_seconds,
+"api_request_timeout": self._api_request_timeout,
+"task_timeout_seconds": self._task_timeout_seconds,
+"agent_heartbeat_interval": self._agent_heartbeat_interval,
+"scraper_config": self._scraper_config,
+"vector_db_config": self._vector_db_config
+}
+}
+
+# Initialize config immediately so it's available for logging setup
+config = Config()
+
+# --- Logging System ---
+class ColoredFormatter(logging.Formatter):
+"""Custom colored formatter for console output."""
+COLORS = {
+'DEBUG': '\033[96m',
+'INFO': '\033[92m',
+'WARNING': '\033[93m',
+'ERROR': '\033[91m',
+'CRITICAL': '\033[95m',
+'RESET': '\033[0m'
+}
+
+def format(self, record):
+log_message = super().format(record)
+if sys.stdout.isatty() or os.environ.get('COLAB_GPU', False):
+return f"{self.COLORS.get(record.levelname, '')}{log_message}{self.COLORS['RESET']}"
+return log_message
+
+class LogManager:
+"""Enhanced logging manager with file rotation and colored output."""
+def __init__(self, name: str = "aks"):
+self.logger = logging.getLogger(name)
+self.logger.setLevel(config.log_level)
+
+for handler in self.logger.handlers[:]:
+self.logger.removeHandler(handler)
+handler.close()
+
+self._setup_handlers()
+self._start_time = time.time()
+
+def _setup_handlers(self):
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(config.log_level)
+console_formatter = ColoredFormatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+console_handler.setFormatter(console_formatter)
+self.logger.addHandler(console_handler)
+
+log_dir = config.repo_path / "logs"
+log_file = log_dir / "aks.log"
+try:
+log_dir.mkdir(parents=True, exist_ok=True)
+file_handler = RotatingFileHandler(
+filename=log_file,
+maxBytes=MAX_LOG_SIZE,
+backupCount=MAX_LOG_BACKUPS,
+encoding='utf-8'
+)
+file_handler.setLevel(logging.DEBUG)
+file_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+file_handler.setFormatter(file_formatter)
+self.logger.addHandler(file_handler)
+except Exception as e:
+self.logger.error(f"Failed to setup file logger at {log_file}: {e}", exc_info=True)
+
+def _get_uptime(self) -> float:
+return time.time() - self._start_time
+
+def debug(self, message: str, *args, **kwargs):
+self.logger.debug(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def info(self, message: str, *args, **kwargs):
+self.logger.info(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def warning(self, message: str, *args, **kwargs):
+self.logger.warning(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def error(self, message: str, *args, **kwargs):
+self.logger.error(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def critical(self, message: str, *args, **kwargs):
+self.logger.critical(message, *args, extra={'uptime': self._get_uptime()}, **kwargs)
+def exception(self, message: str, *args, **kwargs):
+self.logger.exception(message, *args, exc_info=True, **kwargs)
+
+LOGGER = LogManager()
+
+# --- AI Provider Implementation ---
+class AIProvider:
+"""Base class for AI providers with common functionality."""
+def __init__(self, name: str, api_key: Optional[str] = None):
+self.name = name
+self.api_key = api_key
+self.last_used = 0
+self.usage_count = 0
+self.error_count = 0
+self.rate_limit = 60
+self.active = True
+self.quota_exceeded = False
+self.model_access_issue = False
+self.logger = logging.getLogger(f"AIProvider.{name}")
+
+def is_available(self) -> bool:
+if not self.active or self.quota_exceeded or self.model_access_issue:
+return False
+if (time.time() - self.last_used) < (60 / self.rate_limit):
+return False
+return True
+
+def record_usage(self, success: bool = True):
+self.last_used = time.time()
+self.usage_count += 1
+if not success:
+self.error_count += 1
+if self.error_count > 5:
+self.active = False
+self.logger.warning(f"Provider {self.name} disabled due to too many consecutive errors.")
+else:
+self.error_count = 0
+
+def reset_status(self):
+self.error_count = 0
+self.active = True
+self.quota_exceeded = False
+self.model_access_issue = False
+self.logger.info(f"Provider {self.name} status reset.")
+
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 2048) -> Optional[str]:
+raise NotImplementedError("Subclasses must implement generate_text method.")
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+raise NotImplementedError("Subclasses must implement generate_code method.")
+
+def with_retries(func: Callable) -> Callable:
+"""
+Decorator to retry a function with exponential backoff for API calls.
+Uses config.api_max_retries and a backoff factor.
+"""
+def wrapper(*args, **kwargs):
+max_retries = kwargs.pop("max_retries", config.api_max_retries)
+backoff_factor = kwargs.pop("backoff_factor", 1.0)
+
+for attempt in range(max_retries + 1):
+try:
+return func(*args, **kwargs)
+except Exception as e:
+if attempt == max_retries:
+LOGGER.error(f"Function {func.__name__} failed after {max_retries} retries: {e}", exc_info=True)
+raise
+wait_time = backoff_factor * (2 ** attempt) + random.uniform(0, 1)
+LOGGER.warning(f"Attempt {attempt + 1}/{max_retries + 1} for {func.__name__} failed. Retrying in {wait_time:.2f} seconds...")
+time.sleep(wait_time)
+return None # Should ideally raise if all retries fail
+return wrapper
+
+class GeminiProvider(AIProvider):
+"""Google Gemini API Provider."""
+def __init__(self, api_key: str):
+super().__init__("Gemini", api_key)
+self.model: Optional[genai.GenerativeModel] = None
+self._initialize()
+
+def _initialize(self):
+if genai is None:
+self.logger.warning("Google Generative AI package not installed, GeminiProvider disabled.")
+self.active = False
+return
+if not self.api_key:
+self.logger.warning("Gemini API key not provided, GeminiProvider disabled.")
+self.active = False
+return
+try:
+genai.configure(api_key=self.api_key)
+self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
+# Test a small generation to verify API key and model access
+self.model.generate_content("test", generation_config=genai.types.GenerationConfig(max_output_tokens=1))
+self.active = True
+self.logger.info("Gemini provider initialized successfully.")
+except Exception as e:
+self.logger.error(f"Gemini client initialization failed: {e}", exc_info=True)
+self.active = False
+self.model_access_issue = True
+
+@with_retries
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 2048) -> Optional[str]:
+if not self.is_available() or not self.model:
+self.logger.warning("GeminiProvider is not available for text generation.")
+return None
+try:
+messages = [
+{"role": "system", "parts": [system_prompt]},
+{"role": "user", "parts": [prompt]}
+]
+generation_config = genai.types.GenerationConfig(
+temperature=0.7,
+max_output_tokens=max_tokens
+)
+response = self.model.generate_content(messages, generation_config=generation_config)
+
+if response.candidates and response.candidates[0].content.parts:
+self.record_usage(True)
+return response.candidates[0].content.parts[0].text.strip()
+else:
+block_reason = response.prompt_feedback.block_reason.name if response.prompt_feedback else 'Unknown'
+self.logger.warning(f"Gemini generation returned no content. Reason: {block_reason}")
+self.record_usage(False)
+return None
+except genai.types.model_error.BlockedPromptException as e:
+self.logger.error(f"Gemini prompt blocked: {e}")
+self.record_usage(False)
+return None
+except Exception as e:
+self.logger.error(f"Unexpected error during Gemini text generation: {e}", exc_info=True)
+self.record_usage(False)
+raise # Re-raise to trigger decorator retry
+
+@with_retries
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+code_system_prompt = f"You are an expert Python programmer. Only output valid Python code, without any conversational text or markdown code blocks, unless specifically requested. {system_prompt}"
+result = self.generate_text(prompt, code_system_prompt, max_tokens)
+
+if result:
+# Attempt to extract code if wrapped in markdown
+if "```python" in result:
+code_match = re.search(r"```python\s*(.*?)\s*```", result, re.DOTALL)
+if code_match:
+return code_match.group(1).strip()
+elif "```" in result: # Generic code block
+code_match = re.search(r"```\s*(.*?)\s*```", result, re.DOTALL)
+if code_match:
+return code_match.group(1).strip()
+return result.strip()
+return None
+
+class FreeAIProvider(AIProvider):
+"""Free AI provider using GPT-2 from Hugging Face Transformers."""
+def __init__(self):
+super().__init__("FreeAI_GPT2", api_key="free")
+self.model = None
+self.tokenizer = None
+self.device = "cuda" if torch and torch.cuda.is_available() else "cpu"
+self._initialize()
+
+def _initialize(self):
+if AutoModelForCausalLM is None or AutoTokenizer is None or torch is None:
+self.logger.warning("Transformers or PyTorch not imported. FreeAIProvider disabled.")
+self.active = False
+return
+try:
+model_name = "gpt2"
+self.logger.info(f"Attempting to load free AI model: {model_name} on {self.device.upper()}")
+self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+if self.tokenizer.pad_token is None: # GPT-2 doesn't have a pad_token by default
+self.tokenizer.pad_token = self.tokenizer.eos_token
+self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
+self.active = True
+self.logger.info("Free AI provider (GPT-2) initialized successfully.")
+except Exception as e:
+self.logger.error(f"Failed to initialize Free AI provider (GPT-2): {e}", exc_info=True)
+self.active = False
+
+@with_retries
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 500) -> Optional[str]:
+if not self.is_available() or not self.model:
+self.logger.warning("FreeAIProvider is not available for text generation.")
+return None
+try:
+full_prompt = f"{system_prompt}\n\n{prompt}"
+max_input_length = self.tokenizer.model_max_length - max_tokens - 10 # Reserve tokens for output and buffer
+inputs = self.tokenizer(full_prompt, return_tensors="pt", truncation=True, max_length=max_input_length).to(self.device)
+
+if set_seed: set_seed(42) # For reproducibility if needed
+
+outputs = self.model.generate(
+inputs.input_ids,
+max_new_tokens=max_tokens,
+temperature=0.7,
+do_sample=True,
+pad_token_id=self.tokenizer.eos_token_id,
+num_return_sequences=1
+)
+generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+# Remove the prompt from the generated text
+if generated.startswith(full_prompt):
+generated = generated[len(full_prompt):].strip()
+
+if not generated.strip():
+self.logger.warning("FreeAIProvider generated empty content.")
+self.record_usage(False)
+return None
+self.record_usage(True)
+return generated
+except Exception as e:
+self.logger.error(f"Free AI text generation failed: {e}", exc_info=True)
+self.record_usage(False)
+raise # Re-raise to trigger decorator retry
+
+@with_retries
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 500) -> Optional[str]:
+if not self.is_available():
+return None
+code_system_prompt = f"# Generate Python code only, no explanations, no markdown wrappers.\n{system_prompt}"
+result = self.generate_text(prompt, code_system_prompt, max_tokens)
+
+if result:
+# Attempt to extract code if wrapped in markdown
+if "```python" in result:
+match = re.search(r"```python\s*(.*?)\s*```", result, re.DOTALL)
+result = match.group(1).strip() if match else result
+elif "```" in result: # Generic code block
+match = re.search(r"```\s*(.*?)\s*```", result, re.DOTALL)
+result = match.group(1).strip() if match else result
+
+if not result.strip():
+self.record_usage(False)
+self.logger.warning("FreeAIProvider generated empty or whitespace-only code.")
+return None
+try:
+ast.parse(result) # Validate Python syntax
+self.record_usage(True)
+return result
+except SyntaxError as e:
+self.record_usage(False)
+self.logger.warning(f"FreeAIProvider generated invalid Python syntax: {e}. Code:\n{result}")
+return None
+self.record_usage(False)
+return None
+
+class AIProviderManager:
+"""Manages AI providers with fallback, prioritizing according to preferred_models list."""
+def __init__(self, preferred_models: List[str]):
+self.providers: List[AIProvider] = []
+self.preferred_models = preferred_models
+self.initialize_providers()
+
+def initialize_providers(self):
+self.providers = []
+if config.gemini_key and genai is not None:
+self.providers.append(GeminiProvider(config.gemini_key))
+if AutoModelForCausalLM is not None and AutoTokenizer is not None and torch is not None:
+self.providers.append(FreeAIProvider())
+
+# Sort providers based on preference
+def sort_key(provider):
+try:
+# Normalize provider name for comparison (e.g., 'FreeAI_GPT2' -> 'gpt2')
+return self.preferred_models.index(provider.name.lower().replace("freeai_", ""))
+except ValueError:
+return len(self.preferred_models) # Put unlisted providers at the end
+
+self.providers.sort(key=sort_key)
+
+LOGGER.info(f"Initialized {len(self.providers)} AI providers.")
+LOGGER.info(f"Provider order: {[p.name for p in self.providers if p.active]} (Inactive: {[p.name for p in self.providers if not p.active]})")
+
+def _execute_with_backoff(self, method_name: str, prompt: str, system_prompt: str, max_tokens: int) -> Optional[str]:
+for provider in self.providers:
+if provider.active and provider.is_available():
+generate_method = getattr(provider, method_name)
+try:
+LOGGER.debug(f"Attempting {method_name} with {provider.name}...")
+result = generate_method(prompt, system_prompt, max_tokens)
+if result is not None:
+return result
+else:
+LOGGER.warning(f"{provider.name} returned None for {method_name}. Trying next provider.")
+except Exception as e:
+LOGGER.warning(f"Provider {provider.name} failed for {method_name}: {e}. Trying next provider.", exc_info=False)
+continue # Try next provider on exception
+LOGGER.error("All available providers failed for generation.")
+return None
+
+def generate_text(self, prompt: str, system_prompt: str, max_tokens: int = 2048) -> Optional[str]:
+return self._execute_with_backoff("generate_text", prompt, system_prompt, max_tokens)
+def generate_code(self, prompt: str, system_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+return self._execute_with_backoff("generate_code", prompt, system_prompt, max_tokens)
+def has_available_providers(self) -> bool:
+return any(provider.active and provider.is_available() for provider in self.providers)
+
+def get_provider_status(self) -> Dict[str, str]:
+status = {}
+for provider in self.providers:
+status_text = "Available"
+if not provider.active:
+status_text = "Disabled (Too many errors)"
+elif provider.quota_exceeded:
+status_text = "Unavailable (Quota Exceeded)"
+elif provider.model_access_issue:
+status_text = "Unavailable (Model Access Issue)"
+elif not provider.is_available():
+status_text = "Unavailable (Inactive or Rate Limited)"
+status[provider.name] = status_text
+return status
+
+def reset_all_provider_statuses(self):
+"""Resets the status of all managed AI providers."""
+for provider in self.providers:
+provider.reset_status()
+LOGGER.info("All AI provider statuses have been reset.")
+
+# --- File Handler ---
+class FileHandler:
+""" Handles file system operations within the repository.
+Manages file reads, writes, copies, moves, deletes, and archive operations.
+"""
+def __init__(self, repo_path: Path, logger_instance: Optional[logging.Logger] = None):
+self.repo_path = repo_path
+self.logger = logger_instance if logger_instance else LOGGER
+self.logger.info("FileHandler initialized.")
+
+def get_file_content(self, file_path: Path) -> Optional[str]:
+"""Reads content from a file."""
+if not file_path.exists():
+self.logger.error(f"File not found for reading: {file_path}")
+return None
+try:
+return file_path.read_text(encoding='utf-8')
+except UnicodeDecodeError as e:
+self.logger.error(f"UnicodeDecodeError reading {file_path}: {e}. Trying latin-1.")
+try:
+return file_path.read_text(encoding='latin-1') # Fallback for common encodings
+except Exception as e_fallback:
+self.logger.error(f"Failed to read file {file_path} with fallback encoding: {e_fallback}")
+return None
+except Exception as e:
+self.logger.error(f"Failed to read file content from {file_path}: {e}", exc_info=True)
+return None
+
+def write_file(self, file_path: Path, content: str) -> bool:
+"""Writes content to a file."""
+try:
+file_path.parent.mkdir(parents=True, exist_ok=True)
+file_path.write_text(content, encoding='utf-8')
+return True
+except Exception as e:
+self.logger.error(f"Failed to write file content to {file_path}: {e}", exc_info=True)
+return False
+
+def file_exists(self, file_path: Path) -> bool:
+"""Checks if a file exists."""
+return file_path.exists()
+
+def copy_file(self, src: Path, dst: Path) -> bool:
+"""Copies a file from src to dst."""
+if not src.exists():
+self.logger.error(f"Source file for copy not found: {src}")
+return False
+try:
+dst.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2(src, dst)
+self.logger.debug(f"Copied {src} to {dst}")
+return True
+except Exception as e:
+self.logger.error(f"copy_file failed for {src} to {dst}: {e}", exc_info=True)
+return False
+
+def move_file(self, src: Path, dst: Path) -> bool:
+"""Moves a file from src to dst."""
+if not src.exists():
+self.logger.error(f"Source file for move not found: {src}")
+return False
+try:
+dst.parent.mkdir(parents=True, exist_ok=True)
+shutil.move(src, dst)
+self.logger.debug(f"Moved {src} to {dst}")
+return True
+except Exception as e:
+self.logger.error(f"move_file failed for {src} to {dst}: {e}", exc_info=True)
+return False
+
+def delete_file(self, file_path: Path) -> bool:
+"""Deletes a file."""
+if not file_path.exists():
+self.logger.warning(f"Attempted to delete non-existent file: {file_path}")
+return False
+try:
+file_path.unlink()
+self.logger.info(f"Deleted file: {file_path}")
+return True
+except Exception as e:
+self.logger.error(f"Failed to delete file {file_path}: {e}", exc_info=True)
+return False
+
+def delete_directory(self, dir_path: Path) -> bool:
+"""Deletes a directory and its contents."""
+if not dir_path.exists():
+self.logger.warning(f"Attempted to delete non-existent directory: {dir_path}")
+return False
+try:
+shutil.rmtree(dir_path)
+self.logger.info(f"Deleted directory: {dir_path}")
+return True
+except Exception as e:
+self.logger.error(f"Failed to delete directory {dir_path}: {e}", exc_info=True)
+return False
+
+def copy_to_repo(self, src_path: Path, dest_subdir: str = "user_uploads") -> Optional[Path]:
+"""Copies a file from src to a subdirectory within the repository."""
+dest_dir = self.repo_path / dest_subdir
+dest_dir.mkdir(parents=True, exist_ok=True)
+destination_file_path = dest_dir / src_path.name
+if self.copy_file(src_path, destination_file_path):
+self.logger.info(f"User file '{src_path.name}' copied to repository: {destination_file_path}")
+return destination_file_path
+return None
+
+def archive_directory(self, src_dir: Path, dest_dir: Path) -> bool:
+"""Archives a directory by moving its contents."""
+try:
+if not src_dir.exists():
+self.logger.warning(f"Source directory for archiving does not exist: {src_dir}")
+return False
+dest_dir.mkdir(parents=True, exist_ok=True)
+for item in src_dir.iterdir():
+shutil.move(str(item), str(dest_dir / item.name))
+self.logger.info(f"Archived contents of {src_dir} to {dest_dir}")
+return True
+except Exception as e:
+self.logger.error(f"Archiving directory {src_dir} failed: {e}", exc_info=True)
+return False
+```
+￼￼Send
+An error occurred while getting a 
