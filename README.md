@@ -1,9 +1,4 @@
-I am purely creating case study's for my own independent research and improvement in AI cognative architecture.
 
-Feel free to distribute test disprove and cite  
-
-would love feed back if you find it useful.
----
 
 # Ephemeral Mind Gem
 
@@ -45,7 +40,7 @@ The Ephemeral Mind Gem is implemented with a modern tech stack:
 **Important Requirement:**
 -   **Google Gemini API Key:** To run any implementation of this system, users **must provide their own Google Gemini API key**. This key is not included in this repository and must be obtained directly from Google.
 
-*Note: The core implementation code is private. This repository contains the research paper and documentation. The link to EMG is in the documentation.*
+*Note: The core implementation code is public included html. This repository contains the research paper and documentation. The link in pdf.*
 
 ## 🔬 Key Demonstrations
 
