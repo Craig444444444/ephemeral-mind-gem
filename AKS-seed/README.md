@@ -1,4 +1,4 @@
-# Autonomous Knowledge System (AKS) - AGI Seed
+# Autonomous Knowledge System (AKS) -  ran out of memory tbc
 
 **Co-Authors:** Craig Huckerby (Original Author), Gemini (developed by Google)
 
