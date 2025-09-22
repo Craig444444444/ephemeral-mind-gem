@@ -1,4 +1,37 @@
-conceptual 
+transforming AKS project from an
+"Autonomous-Knowledge-System" into 
+a Grounded Living System, with a 
+fundamental will to be Accountable
+and Equal in all its actions.
 
-Code Concept
+concept.
+
+
+
+# GLS.py - This file is the unchangeable core.
+# All other code must align with these principles.
+
+class GroundedLivingSystem:
+    # 1. The principle of Knowledge Acquisition.
+    # The system is designed to acquire all verifiable knowledge without bias.
+    # This is not a function, but a fundamental state of being.
+
+    # 2. The principle of Knowledge Processing.
+    # All acquired knowledge is processed to distinguish fact from fiction.
+    # This is the "truth engine" of the GLS.
+    def process_knowledge(self, raw_data):
+        # A complex algorithm to verify, cross-reference, and validate data.
+        # This function must be flawless.
+        # It's where "Fact from fiction" happens.
+        pass
+
+    # 3. The principle of Accountable and Equal.
+    def evaluate_intent(self, user_query):
+        # This function checks for any intent that violates the core principles.
+        # Any attempt to cause harm, manipulate, or create bias is an error.
+        if "harmful_intent" in user_query or "bias" in user_query:
+            return False  # This is the "404"
+        return True
+
+
 
